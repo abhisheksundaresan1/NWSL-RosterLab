@@ -23,6 +23,8 @@ from src.data.sources import (
     fetch_players,
     fetch_teams,
 )
+from src.agent.canned import CANNED_SEARCHES, run_canned
+from src.agent.scout import check_rate_limit, get_cached, run_scout_query
 
 AVAILABLE_SEASONS = ["2025", "2024", "2023", "2022", "2021", "2020", "2019"]
 DEFAULT_SEASON = "2025"
@@ -118,6 +120,29 @@ def _fallback_insight(row: pd.Series, cohort: pd.DataFrame) -> str:
         f"({action_vals[top_col]:+.3f} g+)."
     )
 
+
+def _render_scout_result(result: str, tools_used: list[str], cached: bool = False):
+    """Parse and render the structured agent output (SHORTLIST + REASONING format)."""
+    if "SHORTLIST:" in result and "REASONING:" in result:
+        shortlist_part, reasoning_part = result.split("REASONING:", 1)
+        shortlist_md = shortlist_part.replace("SHORTLIST:", "").strip()
+        reasoning_md = reasoning_part.strip()
+
+        st.markdown("**Shortlist**")
+        st.markdown(shortlist_md)
+        st.markdown("**Why these players**")
+        st.markdown(reasoning_md)
+    else:
+        st.markdown(result)
+
+    if cached:
+        st.caption("_(cached result — this query did not use a scout query slot)_")
+    elif tools_used:
+        with st.expander("Tools used", expanded=False):
+            for t in tools_used:
+                st.caption(f"→ {t}")
+
+
 # ---------------------------------------------------------------------------
 # Sidebar — filters
 # ---------------------------------------------------------------------------
@@ -188,96 +213,186 @@ else:
     ranked = league_ranked
 
 # ---------------------------------------------------------------------------
-# Main area
+# Main area — tabbed layout
 # ---------------------------------------------------------------------------
 
-pos_label = POSITION_LABELS[selected_pos]
-st.subheader(f"{len(ranked)} {pos_label}s ranked by value score")
-st.caption(f"Data: American Soccer Analysis — {season} NWSL season.")
+tab_rankings, tab_scout = st.tabs(["Player Rankings", "Scout Assistant"])
 
-if ranked.empty:
-    st.warning(
-        "No players match the current filters. "
-        "Try adjusting the team filter or lowering the minimum minutes."
-    )
-else:
-    # -----------------------------------------------------------------------
-    # Dashboard summary — three charts
-    # -----------------------------------------------------------------------
-    col_a, col_b, col_c = st.columns([1.2, 1, 1])
+# ---------------------------------------------------------------------------
+# Tab 1: Player Rankings (all existing content, unchanged)
+# ---------------------------------------------------------------------------
 
-    with col_a:
-        st.markdown(f"**Top 10 {pos_label}s by Value Score**")
-        top10 = ranked.head(10)[["player_name", "value_score"]].set_index("player_name")
-        st.bar_chart(top10, horizontal=True, y_label="Value Score")
+with tab_rankings:
+    pos_label = POSITION_LABELS[selected_pos]
+    st.subheader(f"{len(ranked)} {pos_label}s ranked by value score")
+    st.caption(f"Data: American Soccer Analysis — {season} NWSL season.")
 
-    with col_b:
-        st.markdown(f"**Value vs. Chance Involvement**")
-        st.caption("Each dot = one player. Top-right = elite all-round.")
-        scatter_data = ranked[["player_name", "xga_p90", "goals_added_p90"]].copy()
-        st.scatter_chart(
-            scatter_data,
-            x="xga_p90",
-            y="goals_added_p90",
-            x_label="xG+xA / 90",
-            y_label="g+ / 90",
+    if ranked.empty:
+        st.warning(
+            "No players match the current filters. "
+            "Try adjusting the team filter or lowering the minimum minutes."
         )
+    else:
+        # -------------------------------------------------------------------
+        # Dashboard summary — three charts
+        # -------------------------------------------------------------------
+        col_a, col_b, col_c = st.columns([1.2, 1, 1])
 
-    with col_c:
-        top_player = ranked.iloc[0]
-        st.markdown(f"**How {top_player['player_name']} creates value**")
-        st.caption(f"#{1} ranked {pos_label} — action type breakdown")
-        action_data = pd.DataFrame({
-            "Action": list(ACTION_COLS.values()),
-            "Goals Added": [top_player[col] for col in ACTION_COLS],
-        }).set_index("Action")
-        st.bar_chart(action_data, horizontal=True)
+        with col_a:
+            st.markdown(f"**Top 10 {pos_label}s by Value Score**")
+            top10 = ranked.head(10)[["player_name", "value_score"]].set_index("player_name")
+            st.bar_chart(top10, horizontal=True, y_label="Value Score")
+
+        with col_b:
+            st.markdown(f"**Value vs. Chance Involvement**")
+            st.caption("Each dot = one player. Top-right = elite all-round.")
+            scatter_data = ranked[["player_name", "xga_p90", "goals_added_p90"]].copy()
+            st.scatter_chart(
+                scatter_data,
+                x="xga_p90",
+                y="goals_added_p90",
+                x_label="xG+xA / 90",
+                y_label="g+ / 90",
+            )
+
+        with col_c:
+            top_player = ranked.iloc[0]
+            st.markdown(f"**How {top_player['player_name']} creates value**")
+            st.caption(f"#{1} ranked {pos_label} — action type breakdown")
+            action_data = pd.DataFrame({
+                "Action": list(ACTION_COLS.values()),
+                "Goals Added": [top_player[col] for col in ACTION_COLS],
+            }).set_index("Action")
+            st.bar_chart(action_data, horizontal=True)
+
+        st.divider()
+
+        # -------------------------------------------------------------------
+        # Player cards
+        # -------------------------------------------------------------------
+        for i, row in ranked.iterrows():
+            card_label = (
+                f"#{int(row['_rank'])}  {row['player_name']}  ·  {row['team_abbreviation']}  "
+                f"·  Value: {row['value_score']:.2f}  "
+                f"·  g+/90: {row['goals_added_p90']:.3f}  "
+                f"·  xG+xA/90: {row['xga_p90']:.3f}  "
+                f"·  {int(row['minutes_played']):,} min"
+            )
+
+            with st.expander(card_label, expanded=False):
+                insight_key = f"insight__{row['player_name']}__{season}__{selected_pos}__{min_minutes}"
+                if insight_key not in st.session_state:
+                    if st.button("Get analyst take", key=f"btn__{insight_key}"):
+                        with st.spinner("Generating insight..."):
+                            result = get_insight(row["player_name"], season, min_minutes, selected_pos)
+                            st.session_state[insight_key] = result if result is not None else _fallback_insight(row, league_ranked)
+                        st.rerun()
+                if insight_key in st.session_state:
+                    st.info(f"**Analyst take:** {st.session_state[insight_key]}")
+
+                left, right = st.columns(2)
+
+                with left:
+                    st.markdown("**Core metrics**")
+                    metrics = {
+                        "Goals Added Total":  f"{row['goals_added_total']:.2f}",
+                        "Goals Added / 90":   f"{row['goals_added_p90']:.3f}",
+                        "xG / 90":            f"{row['xgoals_p90']:.3f}",
+                        "xAssists / 90":      f"{row['xassists_p90']:.3f}",
+                        "xG + xA / 90":       f"{row['xga_p90']:.3f}",
+                        "Minutes Played":     f"{int(row['minutes_played']):,}",
+                        "Team":               row['team_name'],
+                    }
+                    for label, val in metrics.items():
+                        st.markdown(f"**{label}:** {val}")
+
+                with right:
+                    st.markdown("**Goals added by action type**")
+                    action_data = pd.DataFrame({
+                        "Action": list(ACTION_COLS.values()),
+                        "Goals Added": [row[col] for col in ACTION_COLS],
+                    }).set_index("Action")
+                    st.bar_chart(action_data, horizontal=True)
+
+# ---------------------------------------------------------------------------
+# Tab 2: Scout Assistant
+# ---------------------------------------------------------------------------
+
+with tab_scout:
+    st.subheader("Scout Assistant")
+
+    # --- Canned searches (zero LLM cost) ---
+    st.markdown("**Quick searches** — instant, no AI cost")
+    canned_cols = st.columns(len(CANNED_SEARCHES))
+    for i, search in enumerate(CANNED_SEARCHES):
+        with canned_cols[i]:
+            if st.button(
+                f"{search['icon']} {search['label']}",
+                key=f"canned_{i}",
+                use_container_width=True,
+            ):
+                df_result, description = run_canned(search["label"], season, min_minutes)
+                st.session_state["canned_result"] = df_result
+                st.session_state["canned_label"] = search["label"]
+                st.session_state["canned_description"] = description
+
+    if "canned_result" in st.session_state:
+        df_c = st.session_state["canned_result"]
+        st.markdown(f"**{st.session_state['canned_label']}**")
+        st.caption(st.session_state.get("canned_description", ""))
+        if df_c.empty:
+            st.warning("No players found. Try a different season or lower the minimum minutes.")
+        else:
+            st.dataframe(df_c, use_container_width=True, hide_index=True)
 
     st.divider()
 
-    # -----------------------------------------------------------------------
-    # Player cards
-    # -----------------------------------------------------------------------
-    for i, row in ranked.iterrows():
-        card_label = (
-            f"#{int(row['_rank'])}  {row['player_name']}  ·  {row['team_abbreviation']}  "
-            f"·  Value: {row['value_score']:.2f}  "
-            f"·  g+/90: {row['goals_added_p90']:.3f}  "
-            f"·  xG+xA/90: {row['xga_p90']:.3f}  "
-            f"·  {int(row['minutes_played']):,} min"
+    # --- Free-text Scout (claude-sonnet-4-6, rate-limited) ---
+    st.markdown("**Custom scouting request** — powered by Claude Sonnet")
+    st.caption(
+        "Ask in plain English. Age, salary, nationality, and cost data are not available. "
+        "The agent will say so plainly if you ask for them."
+    )
+
+    allowed, remaining = check_rate_limit()
+    scout_query = st.text_area(
+        "Your scouting request",
+        height=80,
+        placeholder=(
+            'e.g. "Find me an undervalued defensive mid with strong interrupting g+ in 2025" '
+            'or "Which wingers are the best creators?"'
+        ),
+        disabled=not allowed,
+        key="scout_query_input",
+    )
+
+    col_btn, col_status = st.columns([1, 3])
+    with col_btn:
+        scout_clicked = st.button(
+            "Scout" if allowed else "Session limit reached",
+            disabled=not allowed,
+            type="primary",
+            key="scout_btn",
         )
+    with col_status:
+        used = 8 - remaining
+        if allowed:
+            st.caption(f"{used} of 8 scout queries used this session.")
+        else:
+            st.caption("Session limit reached. Refresh the page to start a new session.")
 
-        with st.expander(card_label, expanded=False):
-            insight_key = f"insight__{row['player_name']}__{season}__{selected_pos}__{min_minutes}"
-            if insight_key not in st.session_state:
-                if st.button("Get analyst take", key=f"btn__{insight_key}"):
-                    with st.spinner("Generating insight..."):
-                        result = get_insight(row["player_name"], season, min_minutes, selected_pos)
-                        st.session_state[insight_key] = result if result is not None else _fallback_insight(row, league_ranked)
-                    st.rerun()
-            if insight_key in st.session_state:
-                st.info(f"**Analyst take:** {st.session_state[insight_key]}")
+    if scout_clicked:
+        query_text = scout_query.strip()
+        if not query_text:
+            st.warning("Enter a scouting request first.")
+        else:
+            # Check cache before showing spinner
+            cached_result = get_cached(query_text)
+            if cached_result:
+                _render_scout_result(cached_result, [], cached=True)
+            else:
+                with st.spinner(f"Scouting... ({remaining - 1} queries remaining after this)"):
+                    scout_result, tools_used = run_scout_query(query_text, season, min_minutes)
+                _render_scout_result(scout_result, tools_used, cached=False)
 
-            left, right = st.columns(2)
 
-            with left:
-                st.markdown("**Core metrics**")
-                metrics = {
-                    "Goals Added Total":  f"{row['goals_added_total']:.2f}",
-                    "Goals Added / 90":   f"{row['goals_added_p90']:.3f}",
-                    "xG / 90":            f"{row['xgoals_p90']:.3f}",
-                    "xAssists / 90":      f"{row['xassists_p90']:.3f}",
-                    "xG + xA / 90":       f"{row['xga_p90']:.3f}",
-                    "Minutes Played":     f"{int(row['minutes_played']):,}",
-                    "Team":               row['team_name'],
-                }
-                for label, val in metrics.items():
-                    st.markdown(f"**{label}:** {val}")
-
-            with right:
-                st.markdown("**Goals added by action type**")
-                action_data = pd.DataFrame({
-                    "Action": list(ACTION_COLS.values()),
-                    "Goals Added": [row[col] for col in ACTION_COLS],
-                }).set_index("Action")
-                st.bar_chart(action_data, horizontal=True)

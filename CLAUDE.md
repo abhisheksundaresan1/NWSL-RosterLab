@@ -21,13 +21,28 @@ Full strategy + build plan lives one folder up: `../NWSL_Project_Concept_and_Bui
 All metrics, rankings, and comparisons are computed in deterministic Python (pandas + ready-made metrics). The LLM (Claude API) is a *thin layer* that only phrases already-computed numbers into sentences. It must NEVER calculate. Always keep the raw numbers visible next to any generated text.
 
 ## Architecture (keep the data layer decoupled from the UI)
-Four layers, kept in separate modules so the data layer can later be promoted to a public product with minimal rework:
+Five layers, kept in separate modules so the data layer can later be promoted to a public product with minimal rework:
 1. `src/data/` — **ingest**: pull from sources into a local cache (CSV/Parquet). No UI logic here.
 2. `src/analysis/` — **transform/analyze**: clean, normalize (per-90 / per-position), compute value rankings + similarity. Pure functions.
-3. `src/explain/` — **explain**: thin Claude API layer turning computed rows into one-line "why" sentences.
-4. `app.py` — **present**: Streamlit UI only. It calls the layers above; it contains no data or math logic.
+3. `src/explain/` — **explain**: thin Claude API layer (`claude-haiku-4-5-20251001`) turning computed rows into one-line "why" sentences.
+4. `src/agent/` — **agent**: agentic tool-use layer (`claude-sonnet-4-6`) for natural-language scouting queries. Three tools wrap `src/data/` and `src/analysis/`. Tools compute; the model only narrates real returned numbers. Canned searches (`canned.py`) are fully deterministic with zero LLM cost.
+5. `app.py` — **present**: Streamlit UI only. It calls the layers above; it contains no data or math logic.
 
 **Rule:** `app.py` must not contain data-fetching or metric math. That separation is deliberate.
+
+## Model split
+- `claude-haiku-4-5-20251001` — per-card one-line insight lines (`src/explain/insight.py`). Fast, cheap, single-pass.
+- `claude-sonnet-4-6` — Scout Assistant agentic loop (`src/agent/scout.py`). Multi-step tool reasoning.
+
+## Scout Assistant cost architecture
+- **Canned searches** (`src/agent/canned.py`): deterministic, zero LLM cost. Four one-click queries handle casual browsing — the majority of Scout tab usage.
+- **Free-text Scout** (`src/agent/scout.py`): rate-limited to **8 queries per session** (tracked in `st.session_state`). Query results cached in session state keyed on normalized query string — **only successful results are cached, never error strings**. Cached results bypass the rate limit.
+- **Prompt caching** (`cache_control: {type: ephemeral}` on system prompt + tool defs): GA feature, no beta header required. May not engage if the static prefix is under Anthropic's token minimum (~1,024 tokens) — applied as a minor optimization, not a guaranteed cost-saver.
+- **Tool output caps**: `LEAN_COLS` only (16 columns), max 15 rows per `query_players` call.
+- **Agent loop cap**: 4 iterations maximum.
+
+## Scout agent rules (enforced via system prompt)
+The agent must: call `describe_capabilities` when unsure of available positions/metrics; state plainly when a requested filter (age, salary, nationality, etc.) is not in the dataset; never invent or recall stats from training data; return output in SHORTLIST (markdown table) + REASONING (one sentence per player citing real numbers) format.
 
 ## Stack
 - Python + **Streamlit** (MVP). Free hosting on **Streamlit Community Cloud**.
