@@ -5,7 +5,7 @@ streamlit
 # Data access
 itscalledsoccer        # American Soccer Analysis API (primary)
 statsbombpy            # StatsBomb open data (deep historical)
-soccerdata            # FBref/Understat scrapers (use sparingly; see CLAUDE.md licensing)
+# soccerdata           # FBref scrapers — not used in app, excluded to avoid heavy selenium dep
 
 # Visualization
 mplsoccer
@@ -15,5 +15,5 @@ matplotlib
 anthropic
 python-dotenv
 
-# Storage (optional, for parquet cache)
+# Storage (parquet cache)
 pyarrow
