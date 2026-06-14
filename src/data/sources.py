@@ -20,6 +20,11 @@ RAW_DIR.mkdir(parents=True, exist_ok=True)
 
 _asa = AmericanSoccerAnalysis()
 
+# Seasons available in the ASA NWSL dataset (most recent first).
+# The API has no "list seasons" endpoint so these are hardcoded.
+AVAILABLE_SEASONS = ["2025", "2024", "2023", "2022", "2021", "2020", "2019"]
+DEFAULT_SEASON = "2025"
+
 
 def _cache_path(name: str) -> Path:
     return RAW_DIR / f"{name}.parquet"
@@ -36,23 +41,33 @@ def _flatten_mixed_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def fetch_player_xgoals(refresh: bool = False) -> pd.DataFrame:
-    """NWSL player expected-goals data (cached to data/raw)."""
-    path = _cache_path("nwsl_player_xgoals")
+def fetch_player_xgoals(refresh: bool = False, season_name: str | None = None) -> pd.DataFrame:
+    """NWSL player expected-goals data (cached to data/raw).
+
+    season_name: e.g. "2025". None fetches all seasons aggregated.
+    """
+    suffix = season_name if season_name else "all"
+    path = _cache_path(f"nwsl_player_xgoals_{suffix}")
     if path.exists() and not refresh:
         return pd.read_parquet(path)
-    df = _asa.get_player_xgoals(leagues="nwsl")
+    kwargs = {"season_name": season_name} if season_name else {}
+    df = _asa.get_player_xgoals(leagues="nwsl", **kwargs)
     df = _flatten_mixed_columns(df)
     df.to_parquet(path, index=False)
     return df
 
 
-def fetch_player_goals_added(refresh: bool = False) -> pd.DataFrame:
-    """NWSL player goals added (g+) data (cached to data/raw)."""
-    path = _cache_path("nwsl_player_goals_added")
+def fetch_player_goals_added(refresh: bool = False, season_name: str | None = None) -> pd.DataFrame:
+    """NWSL player goals added (g+) data (cached to data/raw).
+
+    season_name: e.g. "2025". None fetches all seasons aggregated.
+    """
+    suffix = season_name if season_name else "all"
+    path = _cache_path(f"nwsl_player_goals_added_{suffix}")
     if path.exists() and not refresh:
         return pd.read_parquet(path)
-    df = _asa.get_player_goals_added(leagues="nwsl")
+    kwargs = {"season_name": season_name} if season_name else {}
+    df = _asa.get_player_goals_added(leagues="nwsl", **kwargs)
     df = _flatten_mixed_columns(df)
     df.to_parquet(path, index=False)
     return df

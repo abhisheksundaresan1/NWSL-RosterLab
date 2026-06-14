@@ -10,6 +10,8 @@ import streamlit as st
 
 from src.analysis.ranking import build_player_value_table, rank_by_position
 from src.data.sources import (
+    AVAILABLE_SEASONS,
+    DEFAULT_SEASON,
     fetch_player_goals_added,
     fetch_player_xgoals,
     fetch_players,
@@ -50,16 +52,15 @@ st.set_page_config(page_title="NWSL RosterLab", page_icon="⚽", layout="wide")
 
 st.title("NWSL RosterLab")
 st.caption("Ranked, plain-English player-value insights for the NWSL.")
-st.caption("Data: American Soccer Analysis — all NWSL seasons on record, aggregated per player.")
 
 # ---------------------------------------------------------------------------
 # Cached data loader — recomputes only when min_minutes changes
 # ---------------------------------------------------------------------------
 
 @st.cache_data(show_spinner="Loading player data...")
-def load_value_table(min_minutes: int) -> pd.DataFrame:
-    ga = fetch_player_goals_added()
-    xg = fetch_player_xgoals()
+def load_value_table(min_minutes: int, season: str) -> pd.DataFrame:
+    ga = fetch_player_goals_added(season_name=season)
+    xg = fetch_player_xgoals(season_name=season)
     pl = fetch_players()
     tm = fetch_teams()
     return build_player_value_table(ga, xg, pl, tm, min_minutes=min_minutes)
@@ -70,6 +71,12 @@ def load_value_table(min_minutes: int) -> pd.DataFrame:
 
 with st.sidebar:
     st.header("Filters")
+
+    season = st.selectbox(
+        "Season",
+        options=AVAILABLE_SEASONS,
+        index=AVAILABLE_SEASONS.index(DEFAULT_SEASON),
+    )
 
     pos_options = [f"{p} — {POSITION_LABELS[p]}" for p in POSITION_ORDER]
     pos_choice = st.selectbox("Position", pos_options, index=0)
@@ -83,8 +90,8 @@ with st.sidebar:
         step=90,
     )
 
-    # Load full table (cached per min_minutes value)
-    full_table = load_value_table(min_minutes)
+    # Load full table (cached per season + min_minutes combination)
+    full_table = load_value_table(min_minutes, season)
 
     all_teams = sorted(full_table["team_name"].dropna().unique().tolist())
     selected_teams = st.multiselect(
@@ -109,6 +116,7 @@ if selected_teams:
 
 pos_label = POSITION_LABELS[selected_pos]
 st.subheader(f"{len(ranked)} {pos_label}s ranked by value score")
+st.caption(f"Data: American Soccer Analysis — {season} NWSL season.")
 
 if ranked.empty:
     st.warning(
