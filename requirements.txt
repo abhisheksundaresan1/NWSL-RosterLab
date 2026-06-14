@@ -1,0 +1,19 @@
+# Core
+pandas
+streamlit
+
+# Data access
+itscalledsoccer        # American Soccer Analysis API (primary)
+statsbombpy            # StatsBomb open data (deep historical)
+soccerdata            # FBref/Understat scrapers (use sparingly; see CLAUDE.md licensing)
+
+# Visualization
+mplsoccer
+matplotlib
+
+# LLM explanation layer (Phase 3)
+anthropic
+python-dotenv
+
+# Storage (optional, for parquet cache)
+pyarrow

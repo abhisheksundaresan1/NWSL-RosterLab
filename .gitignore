@@ -1,0 +1,22 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Cached data (don't commit large/derived data)
+data/raw/
+data/processed/
+*.parquet
+
+# Claude Code session files
+.claude/
+
+# OS / editor
+.DS_Store
+.ipynb_checkpoints/
+.vscode/
