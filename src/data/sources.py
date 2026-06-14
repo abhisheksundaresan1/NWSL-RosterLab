@@ -25,12 +25,24 @@ def _cache_path(name: str) -> Path:
     return RAW_DIR / f"{name}.parquet"
 
 
+def _flatten_mixed_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Stringify any object column that contains lists or dicts so parquet can store it."""
+    for col in df.select_dtypes(exclude=["number", "bool", "datetime"]).columns:
+        if df[col].apply(lambda v: isinstance(v, (list, dict))).any():
+            df[col] = df[col].apply(
+                lambda v: ",".join(v) if isinstance(v, list) and all(isinstance(i, str) for i in v)
+                else ("" if isinstance(v, dict) else str(v))
+            )
+    return df
+
+
 def fetch_player_xgoals(refresh: bool = False) -> pd.DataFrame:
     """NWSL player expected-goals data (cached to data/raw)."""
     path = _cache_path("nwsl_player_xgoals")
     if path.exists() and not refresh:
         return pd.read_parquet(path)
     df = _asa.get_player_xgoals(leagues="nwsl")
+    df = _flatten_mixed_columns(df)
     df.to_parquet(path, index=False)
     return df
 
@@ -41,6 +53,7 @@ def fetch_player_goals_added(refresh: bool = False) -> pd.DataFrame:
     if path.exists() and not refresh:
         return pd.read_parquet(path)
     df = _asa.get_player_goals_added(leagues="nwsl")
+    df = _flatten_mixed_columns(df)
     df.to_parquet(path, index=False)
     return df
 
@@ -51,6 +64,7 @@ def fetch_players(refresh: bool = False) -> pd.DataFrame:
     if path.exists() and not refresh:
         return pd.read_parquet(path)
     df = _asa.get_players(leagues="nwsl")
+    df = _flatten_mixed_columns(df)
     df.to_parquet(path, index=False)
     return df
 
@@ -61,6 +75,7 @@ def fetch_teams(refresh: bool = False) -> pd.DataFrame:
     if path.exists() and not refresh:
         return pd.read_parquet(path)
     df = _asa.get_teams(leagues="nwsl")
+    df = _flatten_mixed_columns(df)
     df.to_parquet(path, index=False)
     return df
 
