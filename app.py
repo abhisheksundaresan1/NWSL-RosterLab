@@ -248,10 +248,15 @@ else:
         )
 
         with st.expander(card_label, expanded=False):
-            insight = get_insight(row["player_name"], season, min_minutes, selected_pos)
-            if insight is None:
-                insight = _fallback_insight(row, league_ranked)
-            st.info(f"**Analyst take:** {insight}")
+            insight_key = f"insight__{row['player_name']}__{season}__{selected_pos}__{min_minutes}"
+            if insight_key not in st.session_state:
+                if st.button("Get analyst take", key=f"btn__{insight_key}"):
+                    with st.spinner("Generating insight..."):
+                        result = get_insight(row["player_name"], season, min_minutes, selected_pos)
+                        st.session_state[insight_key] = result if result is not None else _fallback_insight(row, league_ranked)
+                    st.rerun()
+            if insight_key in st.session_state:
+                st.info(f"**Analyst take:** {st.session_state[insight_key]}")
 
             left, right = st.columns(2)
 
