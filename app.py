@@ -5,18 +5,26 @@ RULE (see CLAUDE.md): no data-fetching and no metric math in this file.
 Calls src/data/sources.py and src/analysis/ranking.py; renders results.
 """
 
+import sys
+from pathlib import Path
+
+# Ensure the project root is on sys.path so `src` is importable regardless
+# of how Streamlit is launched (with or without PYTHONPATH set).
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 import pandas as pd
 import streamlit as st
 
 from src.analysis.ranking import build_player_value_table, rank_by_position
 from src.data.sources import (
-    AVAILABLE_SEASONS,
-    DEFAULT_SEASON,
     fetch_player_goals_added,
     fetch_player_xgoals,
     fetch_players,
     fetch_teams,
 )
+
+AVAILABLE_SEASONS = ["2025", "2024", "2023", "2022", "2021", "2020", "2019"]
+DEFAULT_SEASON = "2025"
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -101,6 +109,25 @@ with st.sidebar:
         placeholder="All teams",
     )
 
+    st.divider()
+    with st.expander("Metric glossary", expanded=False):
+        st.markdown("""
+| Metric | What it means |
+|---|---|
+| **Value Score** | Z-score within position — how many standard deviations above/below average for her position. 0 = average, +2 = elite. Not comparable across positions. |
+| **Goals Added (g+)** | Total value added across all on-ball actions this season. ASA's primary value metric — positive means she made her team more likely to score or less likely to concede. |
+| **g+ / 90** | Goals added per 90 minutes. Adjusts for playing time so a starter and a rotation player can be compared fairly. |
+| **xG / 90** | Expected goals per 90 — measures shot *quality*, not just volume. Based on shot location, angle, and assist type. |
+| **xAssists / 90** | Expected assists per 90 — credit for passes that led to shots, regardless of whether the shot went in. |
+| **xG+xA / 90** | Combined expected goal involvement per 90. The standard single-number summary of attacking output. |
+| **g+ Shooting** | Slice of g+ from shots taken. High = takes good shots or finishes well. Negative = shoots from poor positions. |
+| **g+ Dribbling** | Slice of g+ from carrying the ball and beating players. |
+| **g+ Passing** | Slice of g+ from passing. Often negative for defensive players; positive for creative midfielders. |
+| **g+ Receiving** | Slice of g+ from how well she receives and controls possession. |
+| **g+ Interrupting** | Slice of g+ from defensive actions — interceptions, blocks, tackles. Key for valuing defenders. |
+| **g+ Fouling** | Slice of g+ from fouls committed. Almost always negative — fouls give opponents free kicks in dangerous areas. |
+""")
+
 # ---------------------------------------------------------------------------
 # Filter and rank
 # ---------------------------------------------------------------------------
@@ -124,6 +151,43 @@ if ranked.empty:
         "Try adjusting the team filter or lowering the minimum minutes."
     )
 else:
+    # -----------------------------------------------------------------------
+    # Dashboard summary — three charts
+    # -----------------------------------------------------------------------
+    col_a, col_b, col_c = st.columns([1.2, 1, 1])
+
+    with col_a:
+        st.markdown(f"**Top 10 {pos_label}s by Value Score**")
+        top10 = ranked.head(10)[["player_name", "value_score"]].set_index("player_name")
+        st.bar_chart(top10, horizontal=True, y_label="Value Score")
+
+    with col_b:
+        st.markdown(f"**Value vs. Chance Involvement**")
+        st.caption("Each dot = one player. Top-right = elite all-round.")
+        scatter_data = ranked[["player_name", "xga_p90", "goals_added_p90"]].copy()
+        st.scatter_chart(
+            scatter_data,
+            x="xga_p90",
+            y="goals_added_p90",
+            x_label="xG+xA / 90",
+            y_label="g+ / 90",
+        )
+
+    with col_c:
+        top_player = ranked.iloc[0]
+        st.markdown(f"**How {top_player['player_name']} creates value**")
+        st.caption(f"#{1} ranked {pos_label} — action type breakdown")
+        action_data = pd.DataFrame({
+            "Action": list(ACTION_COLS.values()),
+            "Goals Added": [top_player[col] for col in ACTION_COLS],
+        }).set_index("Action")
+        st.bar_chart(action_data, horizontal=True)
+
+    st.divider()
+
+    # -----------------------------------------------------------------------
+    # Player cards
+    # -----------------------------------------------------------------------
     for i, row in ranked.iterrows():
         rank_num = i + 1
         card_label = (
