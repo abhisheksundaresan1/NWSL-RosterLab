@@ -16,6 +16,7 @@ import pandas as pd
 import streamlit as st
 
 from src.analysis.ranking import build_player_value_table, rank_by_position
+from src.explain.insight import one_line_insight
 from src.data.sources import (
     fetch_player_goals_added,
     fetch_player_xgoals,
@@ -72,6 +73,50 @@ def load_value_table(min_minutes: int, season: str) -> pd.DataFrame:
     pl = fetch_players()
     tm = fetch_teams()
     return build_player_value_table(ga, xg, pl, tm, min_minutes=min_minutes)
+
+
+# ---------------------------------------------------------------------------
+# LLM insight helpers
+# ---------------------------------------------------------------------------
+
+@st.cache_data(show_spinner=False)
+def _cached_insight(player_name: str, season: str, min_minutes: int, position: str) -> str:
+    """Cache only successful LLM outputs. Raises on failure so st.cache_data skips storage."""
+    full   = load_value_table(min_minutes, season)
+    cohort = rank_by_position(full, position).copy()
+    cohort["_rank"] = range(1, len(cohort) + 1)
+    match  = cohort[cohort["player_name"] == player_name]
+    if match.empty:
+        raise RuntimeError("player not found in cohort")
+    row    = match.iloc[0].to_dict()
+    result = one_line_insight(row, cohort)
+    if result is None:
+        raise RuntimeError("insight generation failed — skip cache")
+    return result
+
+
+def get_insight(player_name: str, season: str, min_minutes: int, position: str) -> str | None:
+    try:
+        return _cached_insight(player_name, season, min_minutes, position)
+    except Exception:
+        return None
+
+
+def _fallback_insight(row: pd.Series, cohort: pd.DataFrame) -> str:
+    action_labels = {
+        "ga_shooting": "shooting", "ga_dribbling": "dribbling",
+        "ga_passing": "passing", "ga_receiving": "receiving",
+        "ga_interrupting": "defensive actions", "ga_fouling": "fouling",
+    }
+    action_vals = {col: float(row.get(col, 0.0)) for col in action_labels}
+    top_col = max(action_vals, key=action_vals.get)
+    return (
+        f"Ranks #{int(row['_rank'])} of {len(cohort)} {row['position']}s on g+/90 "
+        f"({row['goals_added_p90']:.3f} vs. position avg "
+        f"{round(cohort['goals_added_p90'].mean(), 3):.3f}), "
+        f"with her strongest contribution from {action_labels[top_col]} "
+        f"({action_vals[top_col]:+.3f} g+)."
+    )
 
 # ---------------------------------------------------------------------------
 # Sidebar — filters
@@ -132,10 +177,15 @@ with st.sidebar:
 # Filter and rank
 # ---------------------------------------------------------------------------
 
-ranked = rank_by_position(full_table, selected_pos)
+# League-wide rank computed before any team filter so it stays consistent
+# across the card header and insight text.
+league_ranked = rank_by_position(full_table, selected_pos).copy()
+league_ranked["_rank"] = range(1, len(league_ranked) + 1)
 
 if selected_teams:
-    ranked = ranked[ranked["team_name"].isin(selected_teams)].reset_index(drop=True)
+    ranked = league_ranked[league_ranked["team_name"].isin(selected_teams)].reset_index(drop=True)
+else:
+    ranked = league_ranked
 
 # ---------------------------------------------------------------------------
 # Main area
@@ -189,9 +239,8 @@ else:
     # Player cards
     # -----------------------------------------------------------------------
     for i, row in ranked.iterrows():
-        rank_num = i + 1
         card_label = (
-            f"#{rank_num}  {row['player_name']}  ·  {row['team_abbreviation']}  "
+            f"#{int(row['_rank'])}  {row['player_name']}  ·  {row['team_abbreviation']}  "
             f"·  Value: {row['value_score']:.2f}  "
             f"·  g+/90: {row['goals_added_p90']:.3f}  "
             f"·  xG+xA/90: {row['xga_p90']:.3f}  "
@@ -199,6 +248,11 @@ else:
         )
 
         with st.expander(card_label, expanded=False):
+            insight = get_insight(row["player_name"], season, min_minutes, selected_pos)
+            if insight is None:
+                insight = _fallback_insight(row, league_ranked)
+            st.info(f"**Analyst take:** {insight}")
+
             left, right = st.columns(2)
 
             with left:
