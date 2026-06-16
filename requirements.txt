@@ -4,6 +4,7 @@ streamlit
 
 # Data access
 itscalledsoccer        # American Soccer Analysis API (primary)
+requests               # Wikidata SPARQL fetch (player birthdates)
 statsbombpy            # StatsBomb open data (deep historical)
 # soccerdata           # FBref scrapers — not used in app, excluded to avoid heavy selenium dep
 
