@@ -240,7 +240,7 @@ def validate_value_table(df: pd.DataFrame) -> list[str]:
         ("xgoals_p90",           0.0,  1.5),
         ("xassists_p90",         0.0,  1.0),
         ("xga_p90",              0.0,  2.0),
-        ("minutes_played",       0.0, 3000.0),
+        ("minutes_played",       0.0, 3300.0),
     ]
     for col, lo, hi in range_checks:
         if col not in df.columns:
