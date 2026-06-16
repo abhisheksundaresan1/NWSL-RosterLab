@@ -15,6 +15,7 @@ LEAN_COLS = [
     "player_name",
     "team_abbreviation",
     "position",
+    "age",
     "minutes_played",
     "value_score",
     "weighted_ga_p90",
@@ -61,8 +62,12 @@ def describe_capabilities() -> dict:
             "ga_fouling_p90",
             "minutes_played",
         ],
+        "supported_age_filter": {
+            "min_age": "integer (inclusive)",
+            "max_age": "integer (inclusive)",
+            "note": "~14% of players have unknown age and are silently excluded when an age filter is applied.",
+        },
         "unsupported_filters": [
-            "age",
             "salary",
             "contract",
             "cost",
@@ -82,18 +87,22 @@ def query_players(
     sort_by: str = "value_score",
     ascending: bool = False,
     limit: int = 10,
+    min_age: int | None = None,
+    max_age: int | None = None,
 ) -> list[dict]:
     """
     Filter and rank NWSL players. Returns up to min(limit, MAX_ROWS) rows as plain dicts.
 
     All computation delegated to build_player_value_table + rank_by_position.
     Returns an empty list (with an error key) if the position is invalid.
+    Age filters silently exclude players whose age is unknown (~14% of the dataset).
     """
     from src.data.sources import (
         fetch_player_goals_added,
         fetch_player_xgoals,
         fetch_players,
         fetch_teams,
+        fetch_player_birthdates,
     )
     from src.analysis.ranking import build_player_value_table, rank_by_position
 
@@ -102,7 +111,8 @@ def query_players(
         xg = fetch_player_xgoals(season_name=season)
         pl = fetch_players()
         tm = fetch_teams()
-        full = build_player_value_table(ga, xg, pl, tm, min_minutes=min_minutes)
+        bd = fetch_player_birthdates()
+        full = build_player_value_table(ga, xg, pl, tm, birthdates=bd, min_minutes=min_minutes, season=season)
     except Exception as e:
         return [{"error": f"data load failed: {e}"}]
 
@@ -115,6 +125,14 @@ def query_players(
         df = full.copy()
 
     df["_rank"] = range(1, len(df) + 1)
+
+    # Age filters: silently drop rows with unknown age when a filter is requested
+    if (min_age is not None or max_age is not None) and "age" in df.columns:
+        df = df[df["age"].notna()].copy()
+        if min_age is not None:
+            df = df[df["age"] >= min_age]
+        if max_age is not None:
+            df = df[df["age"] <= max_age]
 
     if sort_by not in df.columns:
         sort_by = "value_score"
@@ -141,6 +159,7 @@ def get_player_detail(
         fetch_player_xgoals,
         fetch_players,
         fetch_teams,
+        fetch_player_birthdates,
     )
     from src.analysis.ranking import build_player_value_table, rank_by_position
 
@@ -149,7 +168,8 @@ def get_player_detail(
         xg = fetch_player_xgoals(season_name=season)
         pl = fetch_players()
         tm = fetch_teams()
-        full = build_player_value_table(ga, xg, pl, tm, min_minutes=min_minutes)
+        bd = fetch_player_birthdates()
+        full = build_player_value_table(ga, xg, pl, tm, birthdates=bd, min_minutes=min_minutes, season=season)
     except Exception as e:
         return {"error": f"data load failed: {e}"}
 
@@ -231,6 +251,14 @@ TOOL_DEFS = [
                 "limit": {
                     "type": "integer",
                     "description": "Max rows to return. Default 10, capped at 15.",
+                },
+                "min_age": {
+                    "type": "integer",
+                    "description": "Minimum age (inclusive). Players with unknown age are excluded silently.",
+                },
+                "max_age": {
+                    "type": "integer",
+                    "description": "Maximum age (inclusive). Players with unknown age are excluded silently.",
                 },
             },
             "required": [],

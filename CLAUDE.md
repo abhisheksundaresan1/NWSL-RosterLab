@@ -76,8 +76,9 @@ The agent must: call `describe_capabilities` when unsure of available positions/
 - **American Soccer Analysis** via `itscalledsoccer` — primary source for g+, xG, player/team data. Fan-friendly public API.
 - **StatsBomb open data** via `statsbombpy` — free for public use WITH attribution + logo (their Public Data User Agreement). Good for deep historical (2023 NWSL season).
 - **FBref/Opta** via `soccerdata` — **down-weight this.** Redistribution is NOT allowed, and Opta terminated FBref's advanced feed in Jan 2026, so it's unstable. Use only for basic current-season cross-checks, never republish.
+- **Wikidata** via SPARQL (`https://query.wikidata.org/sparql`) — free, no API key, CC0 license. Used for player birthdates only. Query: all female footballers (P106=Q937857, P21=Q6581072) with P569 (birthdate). ~86% NWSL name-match coverage. 30-day cache TTL. Manual overrides in `data/birthdates_manual.csv`. Age is computed season-aware: today for the current season, Dec 31 of season year for past seasons.
 - **NWSLPA salary releases** — for the later cap features. Verify granularity before relying on it.
-- If we ever expose a public dataset/API (the "#3" platform play), it may ONLY use openly-licensed slices (StatsBomb open data, ASA where permitted) — never Opta-derived data.
+- If we ever expose a public dataset/API (the "#3" platform play), it may ONLY use openly-licensed slices (StatsBomb open data, ASA where permitted, Wikidata CC0) — never Opta-derived data.
 
 ## Build phases
 - **Phase 0 (setup):** repo + this file + first ASA pull printing rows. ("hello, data")

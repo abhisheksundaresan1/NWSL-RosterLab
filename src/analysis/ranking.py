@@ -15,6 +15,7 @@ Value score methodology:
 from __future__ import annotations
 
 import ast
+import unicodedata
 import warnings as _warnings
 
 import pandas as pd
@@ -51,6 +52,16 @@ _ACTION_WEIGHT_COLS: dict[str, str] = {
 
 # Action types present in the g+ data column.
 _ACTION_TYPES = ["Dribbling", "Fouling", "Interrupting", "Passing", "Receiving", "Shooting"]
+
+# Most recent season for season-aware age reference date.
+_CURRENT_SEASON = "2025"
+
+
+def _normalize_name(name: str) -> str:
+    """NFKD → ASCII → lowercase → whitespace collapse for name matching."""
+    s = unicodedata.normalize("NFKD", str(name))
+    s = s.encode("ascii", "ignore").decode("ascii")
+    return " ".join(s.lower().split())
 
 
 def _unpack_goals_added(goals_added: pd.DataFrame) -> pd.DataFrame:
@@ -90,7 +101,9 @@ def build_player_value_table(
     xgoals: pd.DataFrame,
     players: pd.DataFrame,
     teams: pd.DataFrame,
+    birthdates: pd.DataFrame | None = None,
     min_minutes: int = 500,
+    season: str = _CURRENT_SEASON,
 ) -> pd.DataFrame:
     """Build a tidy, ranked player value table for all non-GK positions.
 
@@ -100,12 +113,15 @@ def build_player_value_table(
     xgoals      : raw xG DataFrame from fetch_player_xgoals()
     players     : player reference from fetch_players()
     teams       : team reference from fetch_teams()
+    birthdates  : optional DataFrame from fetch_player_birthdates(); columns
+                  [player_name_normalized, birthdate]. If None, age is omitted.
     min_minutes : minimum minutes threshold to qualify (default 500)
+    season      : season string (e.g. "2025") — used to compute age-at-season
 
     Returns
     -------
     DataFrame sorted by position then value_score descending, with columns:
-      player_name, team_name, team_abbreviation, position, minutes_played,
+      player_name, team_name, team_abbreviation, position, age, minutes_played,
       value_score, weighted_ga_p90, goals_added_total, goals_added_p90,
       xgoals_p90, xassists_p90, xga_p90,
       ga_shooting_p90, ga_dribbling_p90, ga_passing_p90,
@@ -133,14 +149,35 @@ def build_player_value_table(
     if missing_names > 0:
         _warnings.warn(f"{missing_names} rows have no player_name after join -- check player_id coverage.")
 
-    # Step 3: Minutes filter.
+    # Step 3: Join player ages from Wikidata birthdates.
+    # Age reference date: today for current/most-recent season; Dec 31 for past seasons.
+    if birthdates is not None and not birthdates.empty:
+        ref_date = (
+            pd.Timestamp.today().normalize()
+            if season == _CURRENT_SEASON
+            else pd.Timestamp(f"{season}-12-31")
+        )
+        df["player_name_normalized"] = df["player_name"].apply(
+            lambda n: _normalize_name(n) if pd.notna(n) else ""
+        )
+        bd = birthdates[["player_name_normalized", "birthdate"]].copy()
+        bd["birthdate"] = pd.to_datetime(bd["birthdate"], errors="coerce")
+        df = df.merge(bd, on="player_name_normalized", how="left")
+        df["age"] = df["birthdate"].apply(
+            lambda bd: int((ref_date - bd).days // 365.25) if pd.notna(bd) else None
+        )
+        df = df.drop(columns=["player_name_normalized", "birthdate"], errors="ignore")
+    else:
+        df["age"] = None
+
+    # Step 5: Minutes filter.
     n_before = len(df)
     df = df[df["minutes_played"] >= min_minutes].copy()
     n_after = len(df)
     print(f"Minutes filter (>={min_minutes}): {n_before} -> {n_after} rows ({n_before - n_after} dropped)")
     assert len(df) > 0, f"No players survived the {min_minutes}-minute filter -- lower min_minutes?"
 
-    # Step 4: Per-90 normalization -- total metrics and per-action-type.
+    # Step 6: Per-90 normalization -- total metrics and per-action-type.
     p90 = df["minutes_played"] / 90
     df["goals_added_p90"] = df["goals_added_total"] / p90
     df["xgoals_p90"]      = df["xgoals"]              / p90
@@ -151,7 +188,7 @@ def build_player_value_table(
     for key, col in _ACTION_WEIGHT_COLS.items():
         df[f"{col}_p90"] = df[col] / p90
 
-    # Step 5: Position-weighted g+ per 90.
+    # Step 7: Position-weighted g+ per 90.
     # For each player, multiply each action-type per-90 by the position-specific weight and sum.
     # Falls back to equal weights (1.0) for any position not in POSITION_WEIGHTS.
     def _weighted_ga(row: pd.Series) -> float:
@@ -164,7 +201,7 @@ def build_player_value_table(
 
     df["weighted_ga_p90"] = df.apply(_weighted_ga, axis=1)
 
-    # Step 6: Value score -- z-score of weighted_ga_p90 within position.
+    # Step 8: Value score -- z-score of weighted_ga_p90 within position.
     # (Previously z-score of unweighted goals_added_p90; raw g+/90 kept as reference column.)
     df["value_score"] = df.groupby("position")["weighted_ga_p90"].transform(
         lambda g: (g - g.mean()) / g.std() if g.std() > 0 else 0.0
@@ -172,9 +209,9 @@ def build_player_value_table(
     df["value_score"] = df["value_score"].fillna(0.0)
     assert df["value_score"].isna().sum() == 0, "NaN in value_score after z-score"
 
-    # Step 7: Select and order output columns.
+    # Step 9: Select and order output columns.
     out_cols = [
-        "player_name", "team_name", "team_abbreviation", "position", "minutes_played",
+        "player_name", "team_name", "team_abbreviation", "position", "age", "minutes_played",
         "value_score", "weighted_ga_p90", "goals_added_total", "goals_added_p90",
         "xgoals_p90", "xassists_p90", "xga_p90",
         # Per-90 action types (for canned searches and agent sorting)
@@ -232,6 +269,16 @@ def validate_value_table(df: pd.DataFrame) -> list[str]:
         n_null = df[col].isna().sum()
         if n_null > 0:
             issues.append(f"{n_null} rows have null '{col}'")
+
+    # Age coverage check (warn if Wikidata matched fewer than 80% of players)
+    if "age" in df.columns:
+        n_null_age = df["age"].isna().sum()
+        pct_null = n_null_age / len(df) if len(df) > 0 else 0
+        if pct_null > 0.20:
+            issues.append(
+                f"Age missing for {n_null_age}/{len(df)} players ({pct_null:.0%}) — "
+                "Wikidata coverage may be low; check fetch_player_birthdates."
+            )
 
     # Plausible-range checks (wide bounds -- flagging extreme outliers only)
     range_checks = [

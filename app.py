@@ -25,6 +25,7 @@ from src.data.sources import (
     fetch_player_xgoals,
     fetch_players,
     fetch_teams,
+    fetch_player_birthdates,
 )
 from src.agent.canned import CANNED_SEARCHES, run_canned
 from src.agent.scout import check_rate_limit, get_cached, run_scout_query
@@ -77,7 +78,8 @@ def load_value_table(min_minutes: int, season: str) -> pd.DataFrame:
     xg = fetch_player_xgoals(season_name=season)
     pl = fetch_players()
     tm = fetch_teams()
-    return build_player_value_table(ga, xg, pl, tm, min_minutes=min_minutes)
+    bd = fetch_player_birthdates()
+    return build_player_value_table(ga, xg, pl, tm, birthdates=bd, min_minutes=min_minutes, season=season)
 
 
 # ---------------------------------------------------------------------------
@@ -179,12 +181,14 @@ with st.sidebar:
     else:
         st.caption("Data as of: not yet loaded")
 
-    if st.button("Refresh data", help="Re-pulls latest data from ASA. Takes ~10 seconds."):
+    if st.button("Refresh data", help="Re-pulls latest data from ASA + Wikidata ages. Takes ~20 seconds."):
         with st.spinner("Pulling fresh data from ASA..."):
             fetch_player_goals_added(season_name=season, refresh=True)
             fetch_player_xgoals(season_name=season, refresh=True)
             fetch_players(refresh=True)
             fetch_teams(refresh=True)
+        with st.spinner("Refreshing player ages from Wikidata..."):
+            fetch_player_birthdates(refresh=True)
         st.cache_data.clear()
         st.rerun()
 
