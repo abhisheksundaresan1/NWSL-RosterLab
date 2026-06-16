@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pandas as pd
 import streamlit as st
 
-from src.analysis.ranking import build_player_value_table, rank_by_position
+from src.analysis.ranking import build_player_value_table, rank_by_position, validate_value_table
 from src.explain.insight import one_line_insight
 from src.data.sources import (
     fetch_player_goals_added,
@@ -171,6 +171,9 @@ with st.sidebar:
     # Load full table (cached per season + min_minutes combination)
     full_table = load_value_table(min_minutes, season)
 
+    # QA validation — runs on the returned DataFrame, not inside the cached loader
+    _qa_warnings = validate_value_table(full_table)
+
     all_teams = sorted(full_table["team_name"].dropna().unique().tolist())
     selected_teams = st.multiselect(
         "Filter by team (optional)",
@@ -184,18 +187,19 @@ with st.sidebar:
         st.markdown("""
 | Metric | What it means |
 |---|---|
-| **Value Score** | Z-score within position — how many standard deviations above/below average for her position. 0 = average, +2 = elite. Not comparable across positions. |
-| **Goals Added (g+)** | Total value added across all on-ball actions this season. ASA's primary value metric — positive means she made her team more likely to score or less likely to concede. |
-| **g+ / 90** | Goals added per 90 minutes. Adjusts for playing time so a starter and a rotation player can be compared fairly. |
+| **Value Score** | Position-weighted g+/90 z-scored within position. 0 = position average, +2 = elite. Not comparable across positions. |
+| **Weighted g+ / 90** | Position-weighted sum of per-90 action-type g+ scores. Strikers get a higher weight on shooting; CBs get a higher weight on interrupting. This drives the value score ranking. |
+| **Goals Added (g+)** | Total value added across all on-ball actions this season (unweighted season total). ASA's primary value metric. |
+| **g+ / 90 (raw)** | Unweighted goals added per 90 — all action types counted equally. Shown for reference alongside the position-weighted score. |
 | **xG / 90** | Expected goals per 90 — measures shot *quality*, not just volume. Based on shot location, angle, and assist type. |
 | **xAssists / 90** | Expected assists per 90 — credit for passes that led to shots, regardless of whether the shot went in. |
 | **xG+xA / 90** | Combined expected goal involvement per 90. The standard single-number summary of attacking output. |
-| **g+ Shooting** | Slice of g+ from shots taken. High = takes good shots or finishes well. Negative = shoots from poor positions. |
-| **g+ Dribbling** | Slice of g+ from carrying the ball and beating players. |
-| **g+ Passing** | Slice of g+ from passing. Often negative for defensive players; positive for creative midfielders. |
-| **g+ Receiving** | Slice of g+ from how well she receives and controls possession. |
-| **g+ Interrupting** | Slice of g+ from defensive actions — interceptions, blocks, tackles. Key for valuing defenders. |
-| **g+ Fouling** | Slice of g+ from fouls committed. Almost always negative — fouls give opponents free kicks in dangerous areas. |
+| **g+ Shooting** | Season total g+ from shots taken. High = takes good shots or finishes well. |
+| **g+ Dribbling** | Season total g+ from carrying the ball and beating players. |
+| **g+ Passing** | Season total g+ from passing. Often negative for defensive players; positive for creative midfielders. |
+| **g+ Receiving** | Season total g+ from how well she receives and controls possession. |
+| **g+ Interrupting** | Season total g+ from defensive actions — interceptions, blocks, tackles. Key for valuing defenders. |
+| **g+ Fouling** | Season total g+ from fouls committed. Almost always negative — fouls give opponents free kicks in dangerous areas. |
 """)
 
 # ---------------------------------------------------------------------------
@@ -223,9 +227,38 @@ tab_rankings, tab_scout = st.tabs(["Player Rankings", "Scout Assistant"])
 # ---------------------------------------------------------------------------
 
 with tab_rankings:
+    # QA warnings (only shown when data has unexpected nulls or out-of-range values)
+    for _w in _qa_warnings:
+        st.warning(f"Data QA: {_w}")
+
     pos_label = POSITION_LABELS[selected_pos]
     st.subheader(f"{len(ranked)} {pos_label}s ranked by value score")
     st.caption(f"Data: American Soccer Analysis — {season} NWSL season.")
+
+    with st.expander("What does the value score measure? (and its limits)", expanded=False):
+        st.markdown(f"""
+**Value score** is a position-weighted blend of on-ball goals added (g+), z-scored within each position group.
+
+**How it works:** Each of the 6 g+ action types (shooting, dribbling, passing, receiving,
+interrupting, fouling) is converted to per 90 minutes, then multiplied by a position-specific
+weight. For example, interrupting g+/90 is weighted 1.6× for CBs but only 0.3× for strikers;
+shooting is weighted 1.5× for strikers but 0.2× for CBs. The weighted sum is standardized
+within position (0 = position average, +1 = one standard deviation above).
+
+**Current {pos_label} weights (shooting / dribbling / passing / receiving / interrupting / fouling):**
+see `POSITION_WEIGHTS` in `src/analysis/ranking.py` — edit freely to test alternative views.
+
+**The raw g+/90 column** shows the unweighted total for reference — useful if you disagree
+with the weights or want to compare across positions.
+
+**Key limits:**
+- **Off-ball defending is under-measured.** Goals added is an on-ball metric. A CB who
+  marshals her backline without touching the ball won't look as good as her true value.
+- **Volume and availability aren't captured.** A player at 0.20 weighted g+/90 over 1,800
+  minutes may contribute more than one at 0.35 over 500 minutes.
+- **Team context is missing.** A pass-heavy team inflates passing g+; a high-press system
+  inflates interrupting g+. The score does not adjust for team style.
+""")
 
     if ranked.empty:
         st.warning(
@@ -274,7 +307,7 @@ with tab_rankings:
             card_label = (
                 f"#{int(row['_rank'])}  {row['player_name']}  ·  {row['team_abbreviation']}  "
                 f"·  Value: {row['value_score']:.2f}  "
-                f"·  g+/90: {row['goals_added_p90']:.3f}  "
+                f"·  Wtd g+/90: {row['weighted_ga_p90']:.3f}  "
                 f"·  xG+xA/90: {row['xga_p90']:.3f}  "
                 f"·  {int(row['minutes_played']):,} min"
             )
@@ -295,8 +328,9 @@ with tab_rankings:
                 with left:
                     st.markdown("**Core metrics**")
                     metrics = {
+                        "Weighted g+ / 90":   f"{row['weighted_ga_p90']:.3f}",
+                        "Raw g+ / 90":        f"{row['goals_added_p90']:.3f}",
                         "Goals Added Total":  f"{row['goals_added_total']:.2f}",
-                        "Goals Added / 90":   f"{row['goals_added_p90']:.3f}",
                         "xG / 90":            f"{row['xgoals_p90']:.3f}",
                         "xAssists / 90":      f"{row['xassists_p90']:.3f}",
                         "xG + xA / 90":       f"{row['xga_p90']:.3f}",

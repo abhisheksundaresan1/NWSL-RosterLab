@@ -30,6 +30,21 @@ Five layers, kept in separate modules so the data layer can later be promoted to
 
 **Rule:** `app.py` must not contain data-fetching or metric math. That separation is deliberate.
 
+## Value score methodology
+**Position-weighted g+/90, z-scored within position.** Defined in `POSITION_WEIGHTS` dict at the top of `src/analysis/ranking.py` — edit freely to test alternative views.
+
+Each g+ action type (shooting, dribbling, passing, receiving, interrupting, fouling) is divided by minutes/90, then multiplied by a position-specific weight and summed into `weighted_ga_p90`. That column is then z-scored within position to produce `value_score`. The raw (unweighted) `goals_added_p90` is kept as a separate reference column.
+
+**Metric choices and their limits (documented in the UI methodology note):**
+- Weights encode an editorial scouting judgment, not outcome-derived coefficients.
+- Off-ball defending is structurally under-measured: g+ is on-ball only. CBs who defend without the ball won't reflect their full value.
+- No team context adjustment: high-press teams inflate interrupting g+; possession teams inflate passing g+.
+- Volume and availability are not in the score: per-90 removes minutes bias but doesn't reward durability.
+
+**Goals Subtracted (g−):** No separate ASA endpoint. `goals_added_raw` already goes negative (range: −1.83 to +7.67 in 2025 data); `goals_added_total` sums these in. No separate g− column is needed.
+
+**Canned searches** sort by per-90 action-type metrics (`ga_passing_p90`, `ga_interrupting_p90`, etc.), not season totals, to avoid favoring high-minute players.
+
 ## Model split
 - `claude-haiku-4-5-20251001` — per-card one-line insight lines (`src/explain/insight.py`). Fast, cheap, single-pass.
 - `claude-sonnet-4-6` — Scout Assistant agentic loop (`src/agent/scout.py`). Multi-step tool reasoning.

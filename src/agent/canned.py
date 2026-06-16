@@ -12,47 +12,62 @@ import pandas as pd
 
 from src.agent.tools import query_players
 
-# Display columns for canned search results
-DISPLAY_COLS = [
+# Base display columns for all canned search results.
+# Each search also injects its highlight_col (the sort metric) so users can
+# see exactly what drove the ranking.
+BASE_DISPLAY_COLS = [
     "player_name",
     "team_abbreviation",
+    "minutes_played",
     "value_score",
-    "goals_added_p90",
-    "xga_p90",
 ]
 
 DISPLAY_LABELS = {
     "player_name": "Player",
     "team_abbreviation": "Team",
+    "minutes_played": "Minutes",
     "value_score": "Value Score",
-    "goals_added_p90": "g+ / 90",
-    "xga_p90": "xG+xA / 90",
+    "weighted_ga_p90": "Weighted g+/90",
+    "goals_added_p90": "g+/90 (raw)",
+    "xga_p90": "xG+xA/90",
+    "ga_passing_p90": "Passing g+/90",
+    "ga_interrupting_p90": "Interrupting g+/90",
+    "xgoals_p90": "xG/90",
 }
 
 CANNED_SEARCHES: list[dict] = [
     {
         "label": "Top undervalued strikers",
         "icon": "⚡",
-        "description": "Strikers ranked highest by value score -- g+ z-score within the ST cohort.",
+        "description": "Strikers ranked highest by position-weighted value score.",
         "kwargs": {"position": "ST", "sort_by": "value_score", "limit": 10},
+        # sort_by key to display in the results table for context
+        "highlight_col": "weighted_ga_p90",
+        "highlight_label": "Weighted g+/90",
     },
     {
         "label": "Best progressive midfielders",
         "icon": "\U0001f3af",
-        "description": "Central mids ranked by passing g+ -- ball-progressors and creators.",
-        "kwargs": {"position": "CM", "sort_by": "ga_passing", "limit": 10},
+        "description": "Central mids ranked by passing g+ per 90 -- ball-progressors and creators. (Per-90, not season total -- fairly compares rotation players to starters.)",
+        "kwargs": {"position": "CM", "sort_by": "ga_passing_p90", "limit": 10},
+        "highlight_col": "ga_passing_p90",
+        "highlight_label": "Passing g+/90",
     },
     {
         "label": "Elite defensive mids",
         "icon": "\U0001f6e1",
-        "description": "Defensive mids ranked by interrupting g+ -- tacklers and interceptors.",
-        "kwargs": {"position": "DM", "sort_by": "ga_interrupting", "limit": 10},
+        "description": "Defensive mids ranked by interrupting g+ per 90 -- tacklers and interceptors. (Per-90, not season total.)",
+        "kwargs": {"position": "DM", "sort_by": "ga_interrupting_p90", "limit": 10},
+        "highlight_col": "ga_interrupting_p90",
+        "highlight_label": "Interrupting g+/90",
     },
     {
         "label": "Top xG strikers",
         "icon": "\U0001f945",
         "description": "Strikers generating the highest shot quality per 90 -- clinical finishers.",
         "kwargs": {"position": "ST", "sort_by": "xgoals_p90", "limit": 10},
+        "highlight_col": "xgoals_p90",
+        "highlight_label": "xG/90",
     },
 ]
 
@@ -72,6 +87,13 @@ def run_canned(label: str, season: str, min_minutes: int) -> tuple[pd.DataFrame,
     if df.empty or "error" in df.columns:
         return pd.DataFrame(), search["description"]
 
-    available = [c for c in DISPLAY_COLS if c in df.columns]
+    # Build display columns: base set + the sort metric (highlight_col) so the
+    # user sees exactly what drove the ranking
+    highlight = search.get("highlight_col", "")
+    display_cols = BASE_DISPLAY_COLS.copy()
+    if highlight and highlight not in display_cols:
+        display_cols.append(highlight)
+
+    available = [c for c in display_cols if c in df.columns]
     df = df[available].rename(columns=DISPLAY_LABELS)
     return df, search["description"]
