@@ -12,6 +12,9 @@ from pathlib import Path
 # of how Streamlit is launched (with or without PYTHONPATH set).
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from datetime import datetime
+from pathlib import Path
+
 import pandas as pd
 import streamlit as st
 
@@ -68,7 +71,7 @@ st.caption("Ranked, plain-English player-value insights for the NWSL.")
 # Cached data loader — recomputes only when min_minutes changes
 # ---------------------------------------------------------------------------
 
-@st.cache_data(show_spinner="Loading player data...")
+@st.cache_data(show_spinner="Loading player data...", ttl=86400)
 def load_value_table(min_minutes: int, season: str) -> pd.DataFrame:
     ga = fetch_player_goals_added(season_name=season)
     xg = fetch_player_xgoals(season_name=season)
@@ -167,6 +170,23 @@ with st.sidebar:
         value=500,
         step=90,
     )
+
+    # Data freshness — read mtime from the goals-added parquet for this season
+    _parquet_path = Path(__file__).parent / "data" / "raw" / f"nwsl_player_goals_added_{season}.parquet"
+    if _parquet_path.exists():
+        _mtime = datetime.fromtimestamp(_parquet_path.stat().st_mtime)
+        st.caption(f"Data as of: {_mtime.strftime('%b %d, %Y %H:%M')}")
+    else:
+        st.caption("Data as of: not yet loaded")
+
+    if st.button("Refresh data", help="Re-pulls latest data from ASA. Takes ~10 seconds."):
+        with st.spinner("Pulling fresh data from ASA..."):
+            fetch_player_goals_added(season_name=season, refresh=True)
+            fetch_player_xgoals(season_name=season, refresh=True)
+            fetch_players(refresh=True)
+            fetch_teams(refresh=True)
+        st.cache_data.clear()
+        st.rerun()
 
     # Load full table (cached per season + min_minutes combination)
     full_table = load_value_table(min_minutes, season)

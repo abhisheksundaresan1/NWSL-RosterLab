@@ -45,6 +45,13 @@ Each g+ action type (shooting, dribbling, passing, receiving, interrupting, foul
 
 **Canned searches** sort by per-90 action-type metrics (`ga_passing_p90`, `ga_interrupting_p90`, etc.), not season totals, to avoid favoring high-minute players.
 
+**Data freshness:** ASA updates in-season with some lag (typically 1–3 days after matches).
+The parquet file cache in `src/data/sources.py` persists until `refresh=True` is passed.
+`@st.cache_data(ttl=86400)` on `load_value_table` re-runs the analysis layer at most once
+per day, but does NOT re-pull from ASA — it re-reads the existing parquet.
+The "Refresh data" sidebar button is the only path that forces a full re-pull from ASA
+(calls all four fetch functions with `refresh=True`, then clears the Streamlit cache).
+
 ## Model split
 - `claude-haiku-4-5-20251001` — per-card one-line insight lines (`src/explain/insight.py`). Fast, cheap, single-pass.
 - `claude-sonnet-4-6` — Scout Assistant agentic loop (`src/agent/scout.py`). Multi-step tool reasoning.
