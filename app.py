@@ -949,7 +949,7 @@ with tab_about:
     st.divider()
     st.markdown(
         "Built by **Abhishek Sundaresan**. "
-        "[LinkedIn](https://www.linkedin.com/in/abhisheksundaresan) · "
+        "[LinkedIn](https://www.linkedin.com/in/abhishek-sundaresan/) · "
         "[GitHub](https://github.com/abhisheksundaresan1/NWSL-RosterLab)"
     )
     st.markdown("Feedback is welcome, especially from NWSL fans and people working in soccer analytics.")
