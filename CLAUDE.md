@@ -77,8 +77,40 @@ The agent must: call `describe_capabilities` when unsure of available positions/
 - **StatsBomb open data** via `statsbombpy` — free for public use WITH attribution + logo (their Public Data User Agreement). Good for deep historical (2023 NWSL season).
 - **FBref/Opta** via `soccerdata` — **down-weight this.** Redistribution is NOT allowed, and Opta terminated FBref's advanced feed in Jan 2026, so it's unstable. Use only for basic current-season cross-checks, never republish.
 - **Wikidata** via SPARQL (`https://query.wikidata.org/sparql`) — free, no API key, CC0 license. Used for player birthdates only. Query: all female footballers (P106=Q937857, P21=Q6581072) with P569 (birthdate). ~86% NWSL name-match coverage. 30-day cache TTL. Manual overrides in `data/birthdates_manual.csv`. Age is computed season-aware: today for the current season, Dec 31 of season year for past seasons.
+- **Wikipedia** via `requests` + BeautifulSoup — used for validation only: NWSL Best XI (`/wiki/NWSL_Best_XI`), awards (`/wiki/NWSL_Awards`), and per-season standings (`/wiki/20XX_NWSL_season`). Public domain. SSL verification bypassed on Windows (urllib3 warning suppressed). Cache: parquet files, no TTL (refresh=True to re-pull).
 - **NWSLPA salary releases** — for the later cap features. Verify granularity before relying on it.
 - If we ever expose a public dataset/API (the "#3" platform play), it may ONLY use openly-licensed slices (StatsBomb open data, ASA where permitted, Wikidata CC0) — never Opta-derived data.
+
+## Value score validation methodology
+Implemented in `src/data/ground_truth.py` (ingest) + `src/analysis/validation.py` (pure functions).
+
+**Ground truth:** NWSL Best XI (First XI = headline, Second XI = softer tier). Completed seasons: 2019, 2021, 2022, 2023, 2024, 2025 (2020 excluded — cancelled). Seed file `data/validation/best_xi_seed.csv` takes priority over Wikipedia for any season it covers; Wikipedia fills the rest.
+
+**Position bucket collapse (validation only — does not change the model):**
+- CB, FB → DEF
+- DM, CM, AM, W, ST → MF/FW
+- GK → excluded from all hit-rate metrics
+
+**Hit-rate definition:** % of matched outfield First XI players ranking top-3 or top-5 in their collapsed bucket. "Matched" = found in ASA dataset above min_minutes threshold. Unmatched players (below threshold or name mismatch) are excluded from the denominator and listed separately with `difflib` alias candidates.
+
+**Name matching:** `normalize_name()` (NFKD → ASCII → lowercase) + manual aliases in `data/validation/name_aliases.csv`. Known mismatches: "Margaret Purce" → "Midge Purce"; "Izzy Rodriguez" → "Isabel Rodriguez". Sophia Smith, Lindsey Horan, Rose Lavelle, and others are genuinely absent (injuries / playing overseas).
+
+**Metrics computed:**
+- Top-3 / Top-5 hit-rate pooled across all seasons and per-season
+- Defender-bucket and MF/FW-bucket hit-rates separately
+- Median within-bucket rank of matched First XI players
+- ROC-AUC (manual Wilcoxon-Mann-Whitney, no sklearn) treating First XI membership as label
+- Team Spearman ρ (pandas `.corr(method='spearman')`) between team-mean value_score and regular-season points
+
+**Observed results (500-minute threshold, 2019–2025):**
+- Pooled top-3 hit-rate: ~15% (≈3× better than random for bucket sizes of 40–100 players)
+- ROC-AUC: 0.793 — model clearly separates Best XI caliber from non-Best XI
+- Team Spearman ρ: 0.61 (p≈0, n=34 team-seasons) — high-value rosters win more points
+- Defender bucket hit-rate is the weakest (expected: off-ball defending is under-measured by g+)
+
+**JSON cache:** `data/validation/validation_cache.json` — persisted after each run for instant cold loads in the UI. Re-run from the "Model Validation" tab's "Re-run validation" button.
+
+**Team name normalization:** `data/validation/team_aliases.csv` maps Wikipedia team name variants to ASA canonical names (Reign FC → Seattle Reign, Sky Blue FC → Gotham FC, etc.).
 
 ## Build phases
 - **Phase 0 (setup):** repo + this file + first ASA pull printing rows. ("hello, data")

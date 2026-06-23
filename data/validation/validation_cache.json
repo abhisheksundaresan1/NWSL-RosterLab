@@ -1,0 +1,1662 @@
+{
+  "pooled_hit_rate_top3": 0.154,
+  "pooled_hit_rate_top5": 0.231,
+  "pooled_hit_rate_top3_second": 0.057,
+  "pooled_hit_rate_top5_second": 0.132,
+  "defender_hit_rate_top3": 0.136,
+  "defender_hit_rate_top5": 0.227,
+  "mffw_hit_rate_top3": 0.167,
+  "mffw_hit_rate_top5": 0.233,
+  "median_rank": 14.0,
+  "n_first_matched": 52,
+  "roc_auc": 0.793,
+  "team_spearman_rho": 0.61,
+  "team_spearman_p": 0.0,
+  "team_n_observations": 34,
+  "per_season": {
+    "2019": {
+      "first": {
+        "top3": 0.143,
+        "top5": 0.143,
+        "n_matched": 7,
+        "n_unmatched": 3,
+        "median_rank": 11.0
+      },
+      "second": {
+        "top3": 0.0,
+        "top5": 0.143,
+        "n_matched": 7,
+        "n_unmatched": 3,
+        "median_rank": 27.0
+      },
+      "defender_first": {
+        "top3": 0.0,
+        "top5": 0.0,
+        "n": 3
+      },
+      "mffw_first": {
+        "top3": 0.25,
+        "top5": 0.25,
+        "n": 4
+      }
+    },
+    "2021": {
+      "first": {
+        "top3": 0.1,
+        "top5": 0.2,
+        "n_matched": 10,
+        "n_unmatched": 0,
+        "median_rank": 16.0
+      },
+      "second": {
+        "top3": 0.143,
+        "top5": 0.143,
+        "n_matched": 7,
+        "n_unmatched": 3,
+        "median_rank": 25.0
+      },
+      "defender_first": {
+        "top3": 0.0,
+        "top5": 0.0,
+        "n": 4
+      },
+      "mffw_first": {
+        "top3": 0.167,
+        "top5": 0.333,
+        "n": 6
+      }
+    },
+    "2022": {
+      "first": {
+        "top3": 0.125,
+        "top5": 0.125,
+        "n_matched": 8,
+        "n_unmatched": 2,
+        "median_rank": 14.0
+      },
+      "second": {
+        "top3": 0.2,
+        "top5": 0.3,
+        "n_matched": 10,
+        "n_unmatched": 0,
+        "median_rank": 13.0
+      },
+      "defender_first": {
+        "top3": 0.25,
+        "top5": 0.25,
+        "n": 4
+      },
+      "mffw_first": {
+        "top3": 0.0,
+        "top5": 0.0,
+        "n": 4
+      }
+    },
+    "2023": {
+      "first": {
+        "top3": 0.111,
+        "top5": 0.333,
+        "n_matched": 9,
+        "n_unmatched": 1,
+        "median_rank": 9.0
+      },
+      "second": {
+        "top3": 0.0,
+        "top5": 0.0,
+        "n_matched": 10,
+        "n_unmatched": 0,
+        "median_rank": 31.5
+      },
+      "defender_first": {
+        "top3": 0.25,
+        "top5": 0.5,
+        "n": 4
+      },
+      "mffw_first": {
+        "top3": 0.0,
+        "top5": 0.2,
+        "n": 5
+      }
+    },
+    "2024": {
+      "first": {
+        "top3": 0.333,
+        "top5": 0.333,
+        "n_matched": 9,
+        "n_unmatched": 1,
+        "median_rank": 11.0
+      },
+      "second": {
+        "top3": 0.0,
+        "top5": 0.222,
+        "n_matched": 9,
+        "n_unmatched": 1,
+        "median_rank": 35.0
+      },
+      "defender_first": {
+        "top3": 0.25,
+        "top5": 0.25,
+        "n": 4
+      },
+      "mffw_first": {
+        "top3": 0.4,
+        "top5": 0.4,
+        "n": 5
+      }
+    },
+    "2025": {
+      "first": {
+        "top3": 0.111,
+        "top5": 0.222,
+        "n_matched": 9,
+        "n_unmatched": 1,
+        "median_rank": 23.0
+      },
+      "second": {
+        "top3": 0.0,
+        "top5": 0.0,
+        "n_matched": 10,
+        "n_unmatched": 0,
+        "median_rank": 31.5
+      },
+      "defender_first": {
+        "top3": 0.0,
+        "top5": 0.333,
+        "n": 3
+      },
+      "mffw_first": {
+        "top3": 0.167,
+        "top5": 0.167,
+        "n": 6
+      }
+    }
+  },
+  "best_xi_ranked": [
+    {
+      "season": 2019,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "best_xi_name": "Abby Dahlkemper",
+      "asa_name": "Abby Dahlkemper",
+      "bucket_rank": 11.0,
+      "value_score": 1.052,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2019,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "best_xi_name": "Ali Krieger",
+      "asa_name": "Ali Krieger",
+      "bucket_rank": 33.0,
+      "value_score": -0.382,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2019,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "best_xi_name": "Becky Sauerbrunn",
+      "asa_name": "Becky Sauerbrunn",
+      "bucket_rank": 9.0,
+      "value_score": 1.208,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2019,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "best_xi_name": "Casey Short",
+      "asa_name": NaN,
+      "bucket_rank": NaN,
+      "value_score": NaN,
+      "matched": false,
+      "below_minutes": false
+    },
+    {
+      "season": 2019,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Julie Ertz",
+      "asa_name": "Julie Ertz",
+      "bucket_rank": 16.0,
+      "value_score": 0.91,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2019,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Lindsey Horan",
+      "asa_name": NaN,
+      "bucket_rank": NaN,
+      "value_score": NaN,
+      "matched": false,
+      "below_minutes": false
+    },
+    {
+      "season": 2019,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Rose Lavelle",
+      "asa_name": NaN,
+      "bucket_rank": NaN,
+      "value_score": NaN,
+      "matched": false,
+      "below_minutes": false
+    },
+    {
+      "season": 2019,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Tobin Heath",
+      "asa_name": "Tobin Heath",
+      "bucket_rank": 9.0,
+      "value_score": 1.386,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2019,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Sam Kerr",
+      "asa_name": "Sam Kerr",
+      "bucket_rank": 3.0,
+      "value_score": 2.12,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2019,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Christen Press",
+      "asa_name": "Christen Press",
+      "bucket_rank": 25.0,
+      "value_score": 0.331,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2019,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "best_xi_name": "Lauren Barnes",
+      "asa_name": "Lauren Barnes",
+      "bucket_rank": 27.0,
+      "value_score": -0.083,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2019,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "best_xi_name": "Abby Erceg",
+      "asa_name": "Abby Erceg",
+      "bucket_rank": 4.0,
+      "value_score": 1.758,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2019,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "best_xi_name": "Kelley O'Hara",
+      "asa_name": NaN,
+      "bucket_rank": NaN,
+      "value_score": NaN,
+      "matched": false,
+      "below_minutes": false
+    },
+    {
+      "season": 2019,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "best_xi_name": "Emily Sonnett",
+      "asa_name": "Emily Sonnett",
+      "bucket_rank": 37.0,
+      "value_score": -0.515,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2019,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Bethany Balcer",
+      "asa_name": NaN,
+      "bucket_rank": NaN,
+      "value_score": NaN,
+      "matched": false,
+      "below_minutes": false
+    },
+    {
+      "season": 2019,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Crystal Dunn",
+      "asa_name": "Crystal Dunn",
+      "bucket_rank": 11.0,
+      "value_score": 1.281,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2019,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Y\u016bki Nagasato",
+      "asa_name": "Yuki Nagasato",
+      "bucket_rank": 42.0,
+      "value_score": -0.195,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2019,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Kristen Hamilton",
+      "asa_name": "Kristen Hamilton",
+      "bucket_rank": 21.0,
+      "value_score": 0.553,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2019,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Carli Lloyd",
+      "asa_name": "Carli Lloyd",
+      "bucket_rank": 35.0,
+      "value_score": 0.039,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2019,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Megan Rapinoe",
+      "asa_name": NaN,
+      "bucket_rank": NaN,
+      "value_score": NaN,
+      "matched": false,
+      "below_minutes": false
+    },
+    {
+      "season": 2021,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "best_xi_name": "Caprice Dydasco",
+      "asa_name": "Caprice Dydasco",
+      "bucket_rank": 6.0,
+      "value_score": 1.361,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2021,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "best_xi_name": "Alana Cook",
+      "asa_name": "Alana Cook",
+      "bucket_rank": 43.0,
+      "value_score": -0.294,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2021,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "best_xi_name": "Sarah Gorden",
+      "asa_name": "Sarah Gorden",
+      "bucket_rank": 45.0,
+      "value_score": -0.406,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2021,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "best_xi_name": "Carson Pickett",
+      "asa_name": "Carson Pickett",
+      "bucket_rank": 24.0,
+      "value_score": 0.356,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2021,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Ashley Hatch",
+      "asa_name": "Ashley Hatch",
+      "bucket_rank": 33.0,
+      "value_score": 0.363,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2021,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Jess Fishlock",
+      "asa_name": "Jess Fishlock",
+      "bucket_rank": 17.0,
+      "value_score": 1.078,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2021,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Eug\u00e9nie Le Sommer",
+      "asa_name": "Eug\u00e9nie Le Sommer",
+      "bucket_rank": 2.0,
+      "value_score": 2.104,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2021,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Margaret Purce",
+      "asa_name": "Midge Purce",
+      "bucket_rank": 11.0,
+      "value_score": 1.381,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2021,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Trinity Rodman",
+      "asa_name": "Trinity Rodman",
+      "bucket_rank": 4.0,
+      "value_score": 1.784,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2021,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Angela Salem",
+      "asa_name": "Angela Salem",
+      "bucket_rank": 15.0,
+      "value_score": 1.107,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2021,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "best_xi_name": "Sofia Huerta",
+      "asa_name": "Sofia Huerta",
+      "bucket_rank": 73.0,
+      "value_score": -0.621,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2021,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "best_xi_name": "Emily Menges",
+      "asa_name": "Emily Menges",
+      "bucket_rank": 15.0,
+      "value_score": 0.87,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2021,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "best_xi_name": "Emily Fox",
+      "asa_name": "Emily Fox",
+      "bucket_rank": 2.0,
+      "value_score": 1.79,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2021,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "best_xi_name": "Meghan Klingenberg",
+      "asa_name": "Meghan Klingenberg",
+      "bucket_rank": 25.0,
+      "value_score": 0.346,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2021,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Bethany Balcer",
+      "asa_name": NaN,
+      "bucket_rank": NaN,
+      "value_score": NaN,
+      "matched": false,
+      "below_minutes": false
+    },
+    {
+      "season": 2021,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Lindsey Horan",
+      "asa_name": NaN,
+      "bucket_rank": NaN,
+      "value_score": NaN,
+      "matched": false,
+      "below_minutes": false
+    },
+    {
+      "season": 2021,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Mallory Pugh",
+      "asa_name": NaN,
+      "bucket_rank": NaN,
+      "value_score": NaN,
+      "matched": false,
+      "below_minutes": false
+    },
+    {
+      "season": 2021,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Rachel Daly",
+      "asa_name": "Rachel Daly",
+      "bucket_rank": 13.0,
+      "value_score": 1.351,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2021,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Sydney Leroux",
+      "asa_name": "Sydney Leroux",
+      "bucket_rank": 39.0,
+      "value_score": 0.139,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2021,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Ifeoma Onumonu",
+      "asa_name": "Ifeoma Onumonu",
+      "bucket_rank": 44.0,
+      "value_score": 0.044,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2022,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "best_xi_name": "Alana Cook",
+      "asa_name": "Alana Cook",
+      "bucket_rank": 37.0,
+      "value_score": 0.212,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2022,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "best_xi_name": "Naomi Girma",
+      "asa_name": "Naomi Girma",
+      "bucket_rank": 14.0,
+      "value_score": 0.952,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2022,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "best_xi_name": "Sofia Huerta",
+      "asa_name": "Sofia Huerta",
+      "bucket_rank": 24.0,
+      "value_score": 0.755,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2022,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "best_xi_name": "Carson Pickett",
+      "asa_name": "Carson Pickett",
+      "bucket_rank": 1.0,
+      "value_score": 2.33,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2022,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Sam Coffey",
+      "asa_name": "Sam Coffey",
+      "bucket_rank": 14.0,
+      "value_score": 1.146,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2022,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Lo'eau LaBonta",
+      "asa_name": "Lo'eau LaBonta",
+      "bucket_rank": 39.0,
+      "value_score": 0.134,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2022,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Alex Morgan",
+      "asa_name": "Alex Morgan",
+      "bucket_rank": 10.0,
+      "value_score": 1.406,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2022,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Debinha",
+      "asa_name": "Debinha",
+      "bucket_rank": 12.0,
+      "value_score": 1.173,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2022,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Mallory Pugh",
+      "asa_name": NaN,
+      "bucket_rank": NaN,
+      "value_score": NaN,
+      "matched": false,
+      "below_minutes": false
+    },
+    {
+      "season": 2022,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Sophia Smith",
+      "asa_name": NaN,
+      "bucket_rank": NaN,
+      "value_score": NaN,
+      "matched": false,
+      "below_minutes": false
+    },
+    {
+      "season": 2022,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "best_xi_name": "Kelli Hubly",
+      "asa_name": "Kelli Hubly",
+      "bucket_rank": 34.0,
+      "value_score": 0.367,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2022,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "best_xi_name": "Hailie Mace",
+      "asa_name": "Hailie Mace",
+      "bucket_rank": 3.0,
+      "value_score": 1.555,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2022,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "best_xi_name": "Tatumn Milazzo",
+      "asa_name": "Tatumn Milazzo",
+      "bucket_rank": 66.0,
+      "value_score": -0.772,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2022,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "best_xi_name": "Becky Sauerbrunn",
+      "asa_name": "Becky Sauerbrunn",
+      "bucket_rank": 18.0,
+      "value_score": 0.874,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2022,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Kerolin",
+      "asa_name": "Kerolin",
+      "bucket_rank": 7.0,
+      "value_score": 1.884,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2022,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Jess Fishlock",
+      "asa_name": "Jess Fishlock",
+      "bucket_rank": 2.0,
+      "value_score": 3.195,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2022,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Rose Lavelle",
+      "asa_name": "Rose Lavelle",
+      "bucket_rank": 8.0,
+      "value_score": 1.649,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2022,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Diana Ord\u00f3\u00f1ez",
+      "asa_name": "Diana Ordo\u00f1ez",
+      "bucket_rank": 31.0,
+      "value_score": 0.377,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2022,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Megan Rapinoe",
+      "asa_name": "Megan Rapinoe",
+      "bucket_rank": 5.0,
+      "value_score": 2.418,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2022,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Ebony Salmon",
+      "asa_name": "Ebony Salmon",
+      "bucket_rank": 61.0,
+      "value_score": -0.256,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2023,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "best_xi_name": "Naomi Girma",
+      "asa_name": "Naomi Girma",
+      "bucket_rank": 43.0,
+      "value_score": -0.209,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2023,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "best_xi_name": "Ali Krieger",
+      "asa_name": "Ali Krieger",
+      "bucket_rank": 5.0,
+      "value_score": 1.448,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2023,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "best_xi_name": "Sarah Gorden",
+      "asa_name": "Sarah Gorden",
+      "bucket_rank": 9.0,
+      "value_score": 1.244,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2023,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "best_xi_name": "Sam Staab",
+      "asa_name": "Sam Staab",
+      "bucket_rank": 3.0,
+      "value_score": 1.958,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2023,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Sam Coffey",
+      "asa_name": "Sam Coffey",
+      "bucket_rank": 9.0,
+      "value_score": 1.594,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2023,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Debinha",
+      "asa_name": "Debinha",
+      "bucket_rank": 14.0,
+      "value_score": 1.46,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2023,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Jaedyn Shaw",
+      "asa_name": "Jaedyn Shaw",
+      "bucket_rank": 68.0,
+      "value_score": -0.024,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2023,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Kerolin",
+      "asa_name": "Kerolin",
+      "bucket_rank": 5.0,
+      "value_score": 1.948,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2023,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Sophia Smith",
+      "asa_name": NaN,
+      "bucket_rank": NaN,
+      "value_score": NaN,
+      "matched": false,
+      "below_minutes": false
+    },
+    {
+      "season": 2023,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Lynn Williams",
+      "asa_name": "Ryan Williams",
+      "bucket_rank": 18.0,
+      "value_score": 0.736,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2023,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "best_xi_name": "Emily Fox",
+      "asa_name": "Emily Fox",
+      "bucket_rank": 38.0,
+      "value_score": 0.052,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2023,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "best_xi_name": "Kaleigh Kurtz",
+      "asa_name": "Kaleigh Kurtz",
+      "bucket_rank": 13.0,
+      "value_score": 0.877,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2023,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "best_xi_name": "Jenna Nighswonger",
+      "asa_name": "Jenna Nighswonger",
+      "bucket_rank": 65.0,
+      "value_score": -0.953,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2023,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "best_xi_name": "M.A. Vignola",
+      "asa_name": "Mary Vignola",
+      "bucket_rank": 31.0,
+      "value_score": 0.264,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2023,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Savannah DeMelo",
+      "asa_name": "Savannah DeMelo",
+      "bucket_rank": 23.0,
+      "value_score": 1.069,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2023,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Savannah McCaskill",
+      "asa_name": "Savannah McCaskill",
+      "bucket_rank": 32.0,
+      "value_score": 0.713,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2023,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Denise O'Sullivan",
+      "asa_name": "Denise O'Sullivan",
+      "bucket_rank": 82.0,
+      "value_score": -0.169,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2023,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Ashley Hatch",
+      "asa_name": "Ashley Hatch",
+      "bucket_rank": 51.0,
+      "value_score": 0.253,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2023,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Alex Morgan",
+      "asa_name": "Alex Morgan",
+      "bucket_rank": 27.0,
+      "value_score": 0.771,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2023,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Trinity Rodman",
+      "asa_name": "Trinity Rodman",
+      "bucket_rank": 17.0,
+      "value_score": 1.311,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2024,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "best_xi_name": "Jenna Nighswonger",
+      "asa_name": "Jenna Nighswonger",
+      "bucket_rank": 46.0,
+      "value_score": -0.099,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2024,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "best_xi_name": "Kaleigh Kurtz",
+      "asa_name": "Kaleigh Kurtz",
+      "bucket_rank": 3.0,
+      "value_score": 1.835,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2024,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "best_xi_name": "Emily Sams",
+      "asa_name": "Emily Sams",
+      "bucket_rank": 72.0,
+      "value_score": -0.751,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2024,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "best_xi_name": "Casey Krueger",
+      "asa_name": "Casey Krueger",
+      "bucket_rank": 43.0,
+      "value_score": -0.017,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2024,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Temwa Chawinga",
+      "asa_name": "Temwa Chawinga",
+      "bucket_rank": 1.0,
+      "value_score": 3.761,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2024,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Barbra Banda",
+      "asa_name": "Barbra Banda",
+      "bucket_rank": 2.0,
+      "value_score": 3.719,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2024,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Sophia Smith",
+      "asa_name": NaN,
+      "bucket_rank": NaN,
+      "value_score": NaN,
+      "matched": false,
+      "below_minutes": false
+    },
+    {
+      "season": 2024,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Marta",
+      "asa_name": "Marta",
+      "bucket_rank": 85.0,
+      "value_score": -0.301,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2024,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Croix Bethune",
+      "asa_name": "Croix Bethune",
+      "bucket_rank": 9.0,
+      "value_score": 1.673,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2024,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Trinity Rodman",
+      "asa_name": "Trinity Rodman",
+      "bucket_rank": 11.0,
+      "value_score": 1.608,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2024,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "best_xi_name": "Naomi Girma",
+      "asa_name": "Naomi Girma",
+      "bucket_rank": 5.0,
+      "value_score": 1.794,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2024,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "best_xi_name": "Tara McKeown",
+      "asa_name": NaN,
+      "bucket_rank": NaN,
+      "value_score": NaN,
+      "matched": false,
+      "below_minutes": false
+    },
+    {
+      "season": 2024,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "best_xi_name": "Kerry Abello",
+      "asa_name": "Kerry Abello",
+      "bucket_rank": 63.0,
+      "value_score": -0.58,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2024,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "best_xi_name": "Ryan Williams",
+      "asa_name": "Ryan Williams",
+      "bucket_rank": 9.0,
+      "value_score": 1.592,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2024,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Vanessa DiBernardo",
+      "asa_name": "Vanessa DiBernardo",
+      "bucket_rank": 77.0,
+      "value_score": -0.166,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2024,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Lo'eau LaBonta",
+      "asa_name": "Lo'eau LaBonta",
+      "bucket_rank": 12.0,
+      "value_score": 1.196,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2024,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Hal Hershfelt",
+      "asa_name": "Hal Hershfelt",
+      "bucket_rank": 69.0,
+      "value_score": -0.058,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2024,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Esther Gonz\u00e1lez",
+      "asa_name": "Esther Gonz\u00e1lez",
+      "bucket_rank": 35.0,
+      "value_score": 0.545,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2024,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Rose Lavelle",
+      "asa_name": "Rose Lavelle",
+      "bucket_rank": 5.0,
+      "value_score": 2.272,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2024,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Yazmeen Ryan",
+      "asa_name": "Yazmeen Ryan",
+      "bucket_rank": 66.0,
+      "value_score": -0.01,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2025,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "best_xi_name": "Izzy Rodriguez",
+      "asa_name": "Isabel Rodriguez",
+      "bucket_rank": 25.0,
+      "value_score": 0.69,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2025,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "best_xi_name": "Kayla Sharples",
+      "asa_name": "Kayla Sharples",
+      "bucket_rank": 18.0,
+      "value_score": 0.969,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2025,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "best_xi_name": "Tara McKeown",
+      "asa_name": NaN,
+      "bucket_rank": NaN,
+      "value_score": NaN,
+      "matched": false,
+      "below_minutes": false
+    },
+    {
+      "season": 2025,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "best_xi_name": "Avery Patterson",
+      "asa_name": "Avery Patterson",
+      "bucket_rank": 5.0,
+      "value_score": 1.561,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2025,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Sam Coffey",
+      "asa_name": "Sam Coffey",
+      "bucket_rank": 7.0,
+      "value_score": 2.075,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2025,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Olivia Moultrie",
+      "asa_name": "Olivia Moultrie",
+      "bucket_rank": 53.0,
+      "value_score": 0.19,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2025,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Claire Hutton",
+      "asa_name": "Claire Hutton",
+      "bucket_rank": 43.0,
+      "value_score": 0.329,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2025,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Temwa Chawinga",
+      "asa_name": "Temwa Chawinga",
+      "bucket_rank": 1.0,
+      "value_score": 3.999,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2025,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Esther Gonzalez",
+      "asa_name": "Esther Gonz\u00e1lez",
+      "bucket_rank": 44.0,
+      "value_score": 0.315,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2025,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "best_xi_name": "Manaka Matsukubo",
+      "asa_name": "Manaka Matsukubo",
+      "bucket_rank": 23.0,
+      "value_score": 0.782,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2025,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "best_xi_name": "Jordyn Bugg",
+      "asa_name": "Jordyn Bugg",
+      "bucket_rank": 69.0,
+      "value_score": -0.44,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2025,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "best_xi_name": "Hailie Mace",
+      "asa_name": "Hailie Mace",
+      "bucket_rank": 6.0,
+      "value_score": 1.553,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2025,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "best_xi_name": "Lilly Reale",
+      "asa_name": "Lilly Reale",
+      "bucket_rank": 29.0,
+      "value_score": 0.442,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2025,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "best_xi_name": "Emily Sonnett",
+      "asa_name": "Emily Sonnett",
+      "bucket_rank": 70.0,
+      "value_score": -0.471,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2025,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Croix Bethune",
+      "asa_name": "Croix Bethune",
+      "bucket_rank": 34.0,
+      "value_score": 0.599,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2025,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Delphine Cascarino",
+      "asa_name": "Delphine Cascarino",
+      "bucket_rank": 58.0,
+      "value_score": 0.144,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2025,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Kenza Dali",
+      "asa_name": "Kenza Dali",
+      "bucket_rank": 14.0,
+      "value_score": 1.326,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2025,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Taylor Flint",
+      "asa_name": "Taylor Flint",
+      "bucket_rank": 12.0,
+      "value_score": 1.48,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2025,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Emma Sears",
+      "asa_name": "Emma Sears",
+      "bucket_rank": 26.0,
+      "value_score": 0.758,
+      "matched": true,
+      "below_minutes": false
+    },
+    {
+      "season": 2025,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "best_xi_name": "Bia Zaneratto",
+      "asa_name": "Bia Zaneratto",
+      "bucket_rank": 35.0,
+      "value_score": 0.59,
+      "matched": true,
+      "below_minutes": false
+    }
+  ],
+  "unmatched": [
+    {
+      "best_xi_name": "Casey Short",
+      "season": 2019,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "candidates": [
+        "Ashley Hatch",
+        "Casey Krueger",
+        "Bayley Feist"
+      ]
+    },
+    {
+      "best_xi_name": "Lindsey Horan",
+      "season": 2019,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "candidates": [
+        "Lindsey Heaps",
+        "Allie Long",
+        "Hayley Raso"
+      ]
+    },
+    {
+      "best_xi_name": "Rose Lavelle",
+      "season": 2019,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "candidates": [
+        "Rosie White",
+        "Steph Catley"
+      ]
+    },
+    {
+      "best_xi_name": "Kelley O'Hara",
+      "season": 2019,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "candidates": [
+        "Danielle Colaprico",
+        "Hayley Raso",
+        "Estelle Johnson"
+      ]
+    },
+    {
+      "best_xi_name": "Bethany Balcer",
+      "season": 2019,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "candidates": [
+        "Bethany Bos",
+        "Elizabeth Ball",
+        "Dorian Bailey"
+      ]
+    },
+    {
+      "best_xi_name": "Megan Rapinoe",
+      "season": 2019,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "candidates": [
+        "Morgan Andrews",
+        "Morgan Reid",
+        "Meghan Klingenberg"
+      ]
+    },
+    {
+      "best_xi_name": "Bethany Balcer",
+      "season": 2021,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "candidates": [
+        "Bethany Bos",
+        "Elizabeth Ball",
+        "Dorian Bailey"
+      ]
+    },
+    {
+      "best_xi_name": "Lindsey Horan",
+      "season": 2021,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "candidates": [
+        "Lindsey Heaps",
+        "Alex Morgan",
+        "Kelley O'Hara"
+      ]
+    },
+    {
+      "best_xi_name": "Mallory Pugh",
+      "season": 2021,
+      "team_selection": "second",
+      "position_group": "MF/FW",
+      "candidates": [
+        "Mallory Weber",
+        "Madison Pogarch",
+        "Taylor Leach"
+      ]
+    },
+    {
+      "best_xi_name": "Mallory Pugh",
+      "season": 2022,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "candidates": [
+        "Madison Pogarch",
+        "Taylor Smith",
+        "Taylor Leach"
+      ]
+    },
+    {
+      "best_xi_name": "Sophia Smith",
+      "season": 2022,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "candidates": [
+        "Sophie Schmidt",
+        "Sophia Wilson",
+        "Hina Sugita"
+      ]
+    },
+    {
+      "best_xi_name": "Sophia Smith",
+      "season": 2023,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "candidates": [
+        "Sophie Schmidt",
+        "Sophia Wilson",
+        "Hina Sugita"
+      ]
+    },
+    {
+      "best_xi_name": "Sophia Smith",
+      "season": 2024,
+      "team_selection": "first",
+      "position_group": "MF/FW",
+      "candidates": [
+        "Sophie Schmidt",
+        "Sophia Wilson",
+        "Hina Sugita"
+      ]
+    },
+    {
+      "best_xi_name": "Tara McKeown",
+      "season": 2024,
+      "team_selection": "second",
+      "position_group": "DEF",
+      "candidates": [
+        "Tziarra King",
+        "Kiara Pickett",
+        "Victoria Pickett"
+      ]
+    },
+    {
+      "best_xi_name": "Tara McKeown",
+      "season": 2025,
+      "team_selection": "first",
+      "position_group": "DEF",
+      "candidates": [
+        "Adriana Leon",
+        "Kiara Pickett",
+        "Mallie McKenzie"
+      ]
+    }
+  ]
+}
