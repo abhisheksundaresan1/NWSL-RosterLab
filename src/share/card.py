@@ -289,25 +289,45 @@ def render_player_card(
     hook         = _clean(hook)
     insight_text = _clean(insight_text)
 
-    # Truncate insight to first 1-2 sentences (~180 chars max), cut on sentence boundary
-    _sentences = insight_text.replace("! ", ". ").replace("? ", ". ").split(". ")
-    _card_take = ""
-    for _s in _sentences:
-        candidate = (_card_take + (" " if _card_take else "") + _s.strip()).strip()
-        if len(candidate) <= 180:
-            _card_take = candidate
-        else:
-            break
-    if not _card_take:
-        _card_take = insight_text[:180]
-    if _card_take and not _card_take.endswith("."):
-        _card_take += "."
-
     # Layout constants
-    FOOTER_Y  = 1270
-    FOOTER_H  = 80      # 1270-1350
-    TAKE_Y    = 760
-    TAKE_H    = FOOTER_Y - TAKE_Y   # 510px for scout take
+    FOOTER_Y   = 1270
+    FOOTER_H   = 80       # 1270–1350
+    STAT_H     = 52       # stat strip height
+    STAT_Y     = FOOTER_Y - STAT_H   # 1218
+    TAKE_Y     = 760
+    TAKE_W     = CARD_W - 108        # text column width (54px margin each side)
+    TAKE_MAX_H = STAT_Y - TAKE_Y - 20   # max pixel height for scout text (458px)
+
+    # Auto-fit scout take: start at font size 32, shrink until text fits the zone
+    def _fit_take(text: str, max_w_px: int, max_h_px: int) -> tuple[ImageFont.FreeTypeFont, str]:
+        """Return (font, wrapped_text) that fits within max_w_px x max_h_px."""
+        # Use a temporary draw surface to measure
+        _tmp = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+        for size in range(32, 17, -1):
+            font = _get_font(size)
+            # Estimate chars-per-line from pixel width
+            avg_char_w = font.getlength("n")
+            chars_per_line = max(20, int(max_w_px / avg_char_w))
+            wrapped = textwrap.fill(text, width=chars_per_line)
+            bb = _tmp.textbbox((0, 0), wrapped, font=font, spacing=8)
+            if (bb[3] - bb[1]) <= max_h_px:
+                return font, wrapped
+        # Last resort: hard-truncate at minimum font
+        font = _get_font(18)
+        avg_char_w = font.getlength("n")
+        chars_per_line = max(20, int(max_w_px / avg_char_w))
+        return font, textwrap.fill(text, width=chars_per_line)
+
+    take_font, take_wrapped = _fit_take(insight_text, TAKE_W, TAKE_MAX_H)
+
+    # Stat strip text
+    avg_wga = float(cohort["weighted_ga_p90"].mean())
+    avg_xga = float(cohort["xga_p90"].mean())
+    stat_text = (
+        f"Minutes: {int(row.get('minutes_played', 0)):,}"
+        f"   Wtd g+/90: {float(row.get('weighted_ga_p90', 0)):.3f} (pos avg {avg_wga:.3f})"
+        f"   xG+xA/90: {float(row.get('xga_p90', 0)):.3f} (pos avg {avg_xga:.3f})"
+    )
 
     # Canvas
     img  = Image.new("RGBA", (CARD_W, CARD_H), BG_COLOR)
@@ -329,11 +349,10 @@ def render_player_card(
     val_font  = _get_bold_font(44)
     rank_font = _get_font(30)
     vs = float(row.get("value_score", 0))
-    # Label + number
     label_font = _get_font(20)
     draw.text((54, 348), "Value score", font=label_font, fill=TEXT_SECONDARY)
     draw.text((54, 368), f"{vs:+.2f}", font=val_font, fill=(255, 255, 180, 255))
-    # Rank + percentile pill — omit percentile when rank==1 (would show "Top 0%")
+    # Omit percentile for rank==1 (would show "Top 0%")
     if rank == 1:
         rank_text = f"#{rank} of {n_cohort} {pos_label}s"
     else:
@@ -345,13 +364,18 @@ def render_player_card(
     chart_img = chart_img.resize((CARD_W - 80, 300), Image.LANCZOS)
     img.paste(chart_img, (40, 448))
 
-    # --- Zone 5: Scout take (760-1270) ---
-    draw.rectangle([(0, TAKE_Y), (CARD_W, FOOTER_Y)], fill=(16, 36, 52, 255))
-    take_font = _get_font(30)
-    wrapped   = textwrap.fill(_card_take, width=48)
-    # Clamp text so it never paints into the footer band
-    draw.text((54, TAKE_Y + 24), wrapped, font=take_font,
-              fill=TEXT_PRIMARY, spacing=10)
+    # --- Zone 5: Scout take (760-STAT_Y) — full insight, auto-fit font ---
+    draw.rectangle([(0, TAKE_Y), (CARD_W, STAT_Y)], fill=(16, 36, 52, 255))
+    draw.text((54, TAKE_Y + 20), take_wrapped, font=take_font,
+              fill=TEXT_PRIMARY, spacing=8)
+
+    # --- Zone 5b: Stat strip (STAT_Y-FOOTER_Y) ---
+    draw.rectangle([(0, STAT_Y), (CARD_W, FOOTER_Y)], fill=(10, 26, 40, 255))
+    stat_font = _get_font(22)
+    bb = draw.textbbox((0, 0), stat_text, font=stat_font)
+    stat_x = max(54, (CARD_W - (bb[2] - bb[0])) // 2)
+    stat_y = STAT_Y + (STAT_H - (bb[3] - bb[1])) // 2
+    draw.text((stat_x, stat_y), stat_text, font=stat_font, fill=(130, 165, 195, 255))
 
     # --- Zone 6: Footer flush at bottom (1270-1350) ---
     _draw_footer(draw, footer_y=FOOTER_Y, footer_h=FOOTER_H)
