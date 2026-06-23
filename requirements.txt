@@ -13,6 +13,7 @@ statsbombpy            # StatsBomb open data (deep historical)
 # Visualization
 mplsoccer
 matplotlib
+Pillow>=10.0             # player card PNG rendering (src/share/card.py)
 
 # LLM explanation layer (Phase 3)
 anthropic

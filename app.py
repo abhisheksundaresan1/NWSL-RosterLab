@@ -116,6 +116,21 @@ def get_insight(player_name: str, season: str, min_minutes: int, position: str) 
         return None
 
 
+@st.cache_data(show_spinner=False)
+def _cached_player_card(player_name: str, season: str, min_minutes: int, position: str) -> bytes:
+    """Cache rendered PNG bytes keyed on player+season+min_minutes+position."""
+    from src.share.card import render_player_card
+    full   = load_value_table(min_minutes, season)
+    cohort = rank_by_position(full, position).copy()
+    cohort["_rank"] = range(1, len(cohort) + 1)
+    match  = cohort[cohort["player_name"] == player_name]
+    if match.empty:
+        raise ValueError(f"{player_name} not found in cohort")
+    row    = match.iloc[0].to_dict()
+    insight = get_insight(player_name, season, min_minutes, position)
+    return render_player_card(row, cohort, season, insight_text=insight)
+
+
 def _fallback_insight(row: pd.Series, cohort: pd.DataFrame) -> str:
     action_labels = {
         "ga_shooting": "shooting", "ga_dribbling": "dribbling",
@@ -356,6 +371,20 @@ with the weights or want to compare across positions.
                         st.rerun()
                 if insight_key in st.session_state:
                     st.info(f"**Analyst take:** {st.session_state[insight_key]}")
+
+                try:
+                    card_bytes = _cached_player_card(
+                        row["player_name"], season, min_minutes, selected_pos
+                    )
+                    st.download_button(
+                        label="⬇ Download card (PNG)",
+                        data=card_bytes,
+                        file_name=f"{row['player_name'].replace(' ', '_')}_{season}_nwsl_rosterlab.png",
+                        mime="image/png",
+                        key=f"dl_{row['player_name']}_{season}",
+                    )
+                except Exception:
+                    pass  # never crash the Rankings tab over a card render failure
 
                 left, right = st.columns(2)
 
