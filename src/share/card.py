@@ -134,7 +134,7 @@ def headline_hook(row: dict, cohort: pd.DataFrame, season: str) -> str:
     if pct >= 85 and low_min:
         return f"Undervalued: Top {round(100 - pct)}% {pos} on limited minutes"
     if age is not None and age <= 22 and pct >= 80:
-        return f"Rising: Top {round(100 - pct)}% {pos} at just {age}"
+        return f"Rising: Top {round(100 - pct)}% {pos} at just {int(age)}"
     if pct >= 95:
         return f"Top 5% {pos}, {season}"
     if pct >= 90:
@@ -151,8 +151,9 @@ def headline_hook(row: dict, cohort: pd.DataFrame, season: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _trim_sentences(text: str, max_sentences: int = 3) -> str:
-    """Keep first max_sentences sentences. Preserves punctuation."""
-    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    """Keep first max_sentences sentences. Normalizes whitespace before splitting."""
+    normalized = re.sub(r'\s+', ' ', text.strip())
+    sentences = re.split(r'(?<=[.!?])\s+', normalized)
     return " ".join(sentences[:max_sentences])
 
 
@@ -326,9 +327,10 @@ def render_player_card(
             f"xG+xA/90 of {xga_p90:.2f} compares to a position average of {avg_xga:.2f}."
         )
 
-    # Strip em/en dashes from all text drawn on the card (public-facing)
+    # Replace em/en dashes with comma-space; collapse any resulting double spaces
     def _clean(text: str) -> str:
-        return text.replace("—", ",").replace("–", ",")
+        result = text.replace("—", ", ").replace("–", ", ")
+        return re.sub(r'  +', ' ', result)
 
     hook         = _clean(hook)
     insight_text = _clean(insight_text)
