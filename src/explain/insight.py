@@ -19,7 +19,8 @@ _SYSTEM = (
     "You are a sharp NWSL analyst writing concise, specific player insights for "
     "knowledgeable women's-soccer fans. Use ONLY the numbers provided — never invent "
     "stats, ages, injuries, transfers, or any real-world facts. "
-    "Plain English, no jargon dumps, no generic praise."
+    "Plain English, no jargon dumps, no generic praise. "
+    "When citing numbers, round all decimals to 2 places (e.g. 0.56, not 0.560)."
 )
 
 _ACTION_LABELS: dict[str, str] = {
