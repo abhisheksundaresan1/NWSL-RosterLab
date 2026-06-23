@@ -393,191 +393,200 @@ with tab_draft:
         "Z-scored within conference tier so Power 5 and mid-major players are compared fairly."
     )
 
-    college_tables = load_college_tables()
-    draft_board = college_tables["draft_board"]
-    draftable_summary = college_tables["draftable_summary"]
-    trends = college_tables["trends"]
-
-    # Filters
-    col_f1, col_f2, col_f3 = st.columns(3)
-    with col_f1:
-        pos_options_ncaa = ["All"] + sorted(draft_board["position"].dropna().unique().tolist())
-        ncaa_pos = st.selectbox("Position", pos_options_ncaa, key="ncaa_pos")
-    with col_f2:
-        yr_options = ["All"] + sorted(draft_board["class_year"].dropna().unique().tolist())
-        ncaa_yr = st.selectbox("Class year", yr_options, key="ncaa_yr")
-    with col_f3:
-        conf_options = ["All"] + sorted(draft_board["conference"].dropna().unique().tolist())
-        ncaa_conf = st.selectbox("Conference", conf_options, key="ncaa_conf")
-
-    filtered = draft_board.copy()
-    if ncaa_pos != "All":
-        filtered = filtered[filtered["position"] == ncaa_pos]
-    if ncaa_yr != "All":
-        filtered = filtered[filtered["class_year"] == ncaa_yr]
-    if ncaa_conf != "All":
-        filtered = filtered[filtered["conference"] == ncaa_conf]
-
-    # Player profile card — shown above the table when a row is selected
-    # We use session state to persist selection across reruns
-    profile_placeholder = st.container()
-
-    # Compute prior-season deltas for table colouring
-    all_seasons = college_tables["all_seasons"]
-    prior = all_seasons[all_seasons["season"] == "2025"][["name", "school", "goals_pg", "assists_pg", "sog_pg"]].copy()
-    prior = prior.rename(columns={"goals_pg": "_prev_goals_pg", "assists_pg": "_prev_assists_pg", "sog_pg": "_prev_sog_pg"})
-    filtered = filtered.merge(prior, on=["name", "school"], how="left")
-
-    _COLOUR_COLS  = {"goals_pg": "_prev_goals_pg", "assists_pg": "_prev_assists_pg", "sog_pg": "_prev_sog_pg"}
-    _MARGIN_PG    = 0.03
-
-    def _colour_row(row):
-        styles = [""] * len(row)
-        for col, prev_col in _COLOUR_COLS.items():
-            if col not in row.index or prev_col not in row.index:
-                continue
-            idx = row.index.get_loc(col)
-            cur, pre = row[col], row[prev_col]
-            if pd.isna(cur) or pd.isna(pre):
-                continue
-            diff = float(cur) - float(pre)
-            if diff > _MARGIN_PG:
-                styles[idx] = "color: #4CAF50; font-weight: bold"
-            elif diff < -_MARGIN_PG:
-                styles[idx] = "color: #F44336; font-weight: bold"
-        return styles
-
-    st.markdown(f"**{len(filtered)} players** | sorted by draft score (conference-adjusted) — click a row to see player profile")
-
-    display_cols = ["name", "school", "conference", "position", "class_year",
-                    "goals", "assists", "goals_pg", "assists_pg", "sog_pg",
-                    "draft_score", "draft_percentile"]
-    display_cols = [c for c in display_cols if c in filtered.columns]
-
-    display_df = filtered[display_cols + [c for c in ["_prev_goals_pg", "_prev_assists_pg", "_prev_sog_pg"] if c in filtered.columns]].reset_index(drop=True)
-    styled_df = display_df.style.apply(_colour_row, axis=1).hide(
-        axis="columns",
-        subset=[c for c in ["_prev_goals_pg", "_prev_assists_pg", "_prev_sog_pg"] if c in display_df.columns]
-    )
-
-    board_selection = st.dataframe(
-        styled_df,
-        use_container_width=True,
-        hide_index=True,
-        on_select="rerun",
-        selection_mode="single-row",
-        column_config={
-            "name":             st.column_config.TextColumn("Player"),
-            "school":           st.column_config.TextColumn("School"),
-            "conference":       st.column_config.TextColumn("Conference"),
-            "position":         st.column_config.TextColumn("Pos"),
-            "class_year":       st.column_config.TextColumn("Year"),
-            "goals":            st.column_config.NumberColumn("Goals", format="%.0f"),
-            "assists":          st.column_config.NumberColumn("Assists", format="%.0f"),
-            "goals_pg":         st.column_config.NumberColumn("Goals/G", format="%.2f"),
-            "assists_pg":       st.column_config.NumberColumn("Ast/G", format="%.2f"),
-            "sog_pg":           st.column_config.NumberColumn("SoG/G", format="%.2f"),
-            "draft_score":      st.column_config.NumberColumn("Draft Score", format="%.2f"),
-            "draft_percentile": st.column_config.ProgressColumn("Percentile", min_value=0, max_value=100, format="%.0f%%"),
-        },
-    )
-
-    selected_rows = board_selection.selection.rows if board_selection.selection.rows else []
-    if selected_rows:
-        sel = display_df.iloc[selected_rows[0]]
-        history = college_tables["all_seasons"]
-        history = history[
-            (history["name"] == sel["name"]) &
-            (history["school"] == sel["school"])
-        ].sort_values("season")
-
-        with profile_placeholder:
-            st.divider()
-            st.markdown(f"### {sel['name']}")
-            st.caption(f"{sel.get('school', '')} · {sel.get('conference', '')} · {sel.get('position', '')} · {sel.get('class_year', '')}")
-
-            left_col, right_col = st.columns([1, 1])
-
-            with left_col:
-                # Compute deltas from prior season if available
-                prev = history.iloc[-2] if len(history) >= 2 else None
-
-                def _delta(col, margin=0):
-                    if prev is None:
-                        return None
-                    cur_v = sel.get(col)
-                    pre_v = prev.get(col)
-                    if pd.isna(cur_v) or pd.isna(pre_v):
-                        return None
-                    diff = round(float(cur_v) - float(pre_v), 2)
-                    return None if abs(diff) <= margin else diff
-
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Goals",     f"{int(sel['goals']) if pd.notna(sel.get('goals')) else '—'}",     delta=_delta("goals"))
-                m2.metric("Assists",   f"{int(sel['assists']) if pd.notna(sel.get('assists')) else '—'}",  delta=_delta("assists"))
-                m3.metric("Points",    f"{int(sel['points']) if pd.notna(sel.get('points')) else '—'}",    delta=_delta("points"))
-                m4, m5, m6 = st.columns(3)
-                m4.metric("Goals/G",   f"{sel['goals_pg']:.2f}"   if pd.notna(sel.get('goals_pg'))   else "—", delta=_delta("goals_pg"))
-                m5.metric("Assists/G", f"{sel['assists_pg']:.2f}" if pd.notna(sel.get('assists_pg')) else "—", delta=_delta("assists_pg"))
-                m6.metric("SoG/G",     f"{sel['sog_pg']:.2f}"     if pd.notna(sel.get('sog_pg'))     else "—", delta=_delta("sog_pg"))
-
-            with right_col:
-                if len(history) > 1:
-                    season_labels = {"2023": "22-23", "2024": "23-24", "2025": "24-25", "2026": "25-26"}
-                    chart_df = history[["season", "goals_pg", "assists_pg", "points_pg"]].copy()
-                    chart_df["season"] = chart_df["season"].map(season_labels).fillna(chart_df["season"])
-                    chart_df = chart_df.set_index("season")
-                    st.line_chart(chart_df, y=["goals_pg", "assists_pg", "points_pg"],
-                                  y_label="Per Game", use_container_width=True, height=200)
-                else:
-                    st.caption("Only one season of data — trend chart needs 2+ seasons.")
-            st.divider()
-
-    st.divider()
-
-    # Draftable profile fingerprint by position + round
-    if not draftable_summary.empty:
-        st.markdown("**What did NWSL draft picks look like in college? (2021–2024)**")
-        st.caption(
-            "Median stats the season before being drafted, by position and round. "
-            "Use this as a benchmark against current players in the board above."
+    try:
+        college_tables = load_college_tables()
+        draft_board = college_tables["draft_board"]
+        draftable_summary = college_tables["draftable_summary"]
+        trends = college_tables["trends"]
+        _college_available = True
+    except FileNotFoundError:
+        _college_available = False
+        st.info(
+            "NCAA draft board data is not available on this deployment. "
+            "The scraper requires a local Chrome browser — run `python -m src.data.ncaa` "
+            "locally to populate the cache, then commit `data/raw/ncaa_players.parquet`."
         )
-        fp_col_config = {
-            "position_group": st.column_config.TextColumn("Position"),
-            "round":          st.column_config.NumberColumn("Round", format="%d"),
-            "n_players":      st.column_config.NumberColumn("# Matched", format="%d"),
-            "goals_pg":       st.column_config.NumberColumn("Goals/G", format="%.2f"),
-            "assists_pg":     st.column_config.NumberColumn("Ast/G", format="%.2f"),
-            "points_pg":      st.column_config.NumberColumn("Pts/G", format="%.2f"),
-            "sog_pg":         st.column_config.NumberColumn("SoG/G", format="%.2f"),
-            "goals":          st.column_config.NumberColumn("Goals", format="%.1f"),
-            "assists":        st.column_config.NumberColumn("Assists", format="%.1f"),
-            "gp":             st.column_config.NumberColumn("Games", format="%.0f"),
-        }
-        fp_display = [c for c in draftable_summary.columns if c in fp_col_config]
-        st.dataframe(draftable_summary[fp_display], use_container_width=True, hide_index=True,
-                     column_config=fp_col_config)
 
-    st.divider()
+    if _college_available:
+        # Filters
+        col_f1, col_f2, col_f3 = st.columns(3)
+        with col_f1:
+            pos_options_ncaa = ["All"] + sorted(draft_board["position"].dropna().unique().tolist())
+            ncaa_pos = st.selectbox("Position", pos_options_ncaa, key="ncaa_pos")
+        with col_f2:
+            yr_options = ["All"] + sorted(draft_board["class_year"].dropna().unique().tolist())
+            ncaa_yr = st.selectbox("Class year", yr_options, key="ncaa_yr")
+        with col_f3:
+            conf_options = ["All"] + sorted(draft_board["conference"].dropna().unique().tolist())
+            ncaa_conf = st.selectbox("Conference", conf_options, key="ncaa_conf")
 
-    # Biggest improvers
-    st.markdown("**Biggest year-over-year improvers**")
-    st.caption("Players whose goals/game increased most from the prior season.")
-    if not trends.empty:
-        trend_cols = ["name", "school", "season", "prev_goals_pg", "goals_pg", "goals_pg_delta",
-                      "assists_pg_delta", "conference", "position", "class_year"]
-        trend_cols = [c for c in trend_cols if c in trends.columns]
-        st.dataframe(
-            trends[trend_cols].head(20),
+        filtered = draft_board.copy()
+        if ncaa_pos != "All":
+            filtered = filtered[filtered["position"] == ncaa_pos]
+        if ncaa_yr != "All":
+            filtered = filtered[filtered["class_year"] == ncaa_yr]
+        if ncaa_conf != "All":
+            filtered = filtered[filtered["conference"] == ncaa_conf]
+
+        # Player profile card — shown above the table when a row is selected
+        # We use session state to persist selection across reruns
+        profile_placeholder = st.container()
+
+        # Compute prior-season deltas for table colouring
+        all_seasons = college_tables["all_seasons"]
+        prior = all_seasons[all_seasons["season"] == "2025"][["name", "school", "goals_pg", "assists_pg", "sog_pg"]].copy()
+        prior = prior.rename(columns={"goals_pg": "_prev_goals_pg", "assists_pg": "_prev_assists_pg", "sog_pg": "_prev_sog_pg"})
+        filtered = filtered.merge(prior, on=["name", "school"], how="left")
+
+        _COLOUR_COLS  = {"goals_pg": "_prev_goals_pg", "assists_pg": "_prev_assists_pg", "sog_pg": "_prev_sog_pg"}
+        _MARGIN_PG    = 0.03
+
+        def _colour_row(row):
+            styles = [""] * len(row)
+            for col, prev_col in _COLOUR_COLS.items():
+                if col not in row.index or prev_col not in row.index:
+                    continue
+                idx = row.index.get_loc(col)
+                cur, pre = row[col], row[prev_col]
+                if pd.isna(cur) or pd.isna(pre):
+                    continue
+                diff = float(cur) - float(pre)
+                if diff > _MARGIN_PG:
+                    styles[idx] = "color: #4CAF50; font-weight: bold"
+                elif diff < -_MARGIN_PG:
+                    styles[idx] = "color: #F44336; font-weight: bold"
+            return styles
+
+        st.markdown(f"**{len(filtered)} players** | sorted by draft score (conference-adjusted) — click a row to see player profile")
+
+        display_cols = ["name", "school", "conference", "position", "class_year",
+                        "goals", "assists", "goals_pg", "assists_pg", "sog_pg",
+                        "draft_score", "draft_percentile"]
+        display_cols = [c for c in display_cols if c in filtered.columns]
+
+        display_df = filtered[display_cols + [c for c in ["_prev_goals_pg", "_prev_assists_pg", "_prev_sog_pg"] if c in filtered.columns]].reset_index(drop=True)
+        styled_df = display_df.style.apply(_colour_row, axis=1).hide(
+            axis="columns",
+            subset=[c for c in ["_prev_goals_pg", "_prev_assists_pg", "_prev_sog_pg"] if c in display_df.columns]
+        )
+
+        board_selection = st.dataframe(
+            styled_df,
             use_container_width=True,
             hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row",
             column_config={
-                "goals_pg_delta":   st.column_config.NumberColumn("Goals/G Δ", format="%+.2f"),
-                "assists_pg_delta": st.column_config.NumberColumn("Ast/G Δ", format="%+.2f"),
-                "prev_goals_pg":    st.column_config.NumberColumn("Prev Goals/G", format="%.2f"),
-                "goals_pg":         st.column_config.NumberColumn("Curr Goals/G", format="%.2f"),
+                "name":             st.column_config.TextColumn("Player"),
+                "school":           st.column_config.TextColumn("School"),
+                "conference":       st.column_config.TextColumn("Conference"),
+                "position":         st.column_config.TextColumn("Pos"),
+                "class_year":       st.column_config.TextColumn("Year"),
+                "goals":            st.column_config.NumberColumn("Goals", format="%.0f"),
+                "assists":          st.column_config.NumberColumn("Assists", format="%.0f"),
+                "goals_pg":         st.column_config.NumberColumn("Goals/G", format="%.2f"),
+                "assists_pg":       st.column_config.NumberColumn("Ast/G", format="%.2f"),
+                "sog_pg":           st.column_config.NumberColumn("SoG/G", format="%.2f"),
+                "draft_score":      st.column_config.NumberColumn("Draft Score", format="%.2f"),
+                "draft_percentile": st.column_config.ProgressColumn("Percentile", min_value=0, max_value=100, format="%.0f%%"),
             },
         )
+
+        selected_rows = board_selection.selection.rows if board_selection.selection.rows else []
+        if selected_rows:
+            sel = display_df.iloc[selected_rows[0]]
+            history = college_tables["all_seasons"]
+            history = history[
+                (history["name"] == sel["name"]) &
+                (history["school"] == sel["school"])
+            ].sort_values("season")
+
+            with profile_placeholder:
+                st.divider()
+                st.markdown(f"### {sel['name']}")
+                st.caption(f"{sel.get('school', '')} · {sel.get('conference', '')} · {sel.get('position', '')} · {sel.get('class_year', '')}")
+
+                left_col, right_col = st.columns([1, 1])
+
+                with left_col:
+                    prev = history.iloc[-2] if len(history) >= 2 else None
+
+                    def _delta(col, margin=0):
+                        if prev is None:
+                            return None
+                        cur_v = sel.get(col)
+                        pre_v = prev.get(col)
+                        if pd.isna(cur_v) or pd.isna(pre_v):
+                            return None
+                        diff = round(float(cur_v) - float(pre_v), 2)
+                        return None if abs(diff) <= margin else diff
+
+                    m1, m2, m3 = st.columns(3)
+                    m1.metric("Goals",     f"{int(sel['goals']) if pd.notna(sel.get('goals')) else '—'}",     delta=_delta("goals"))
+                    m2.metric("Assists",   f"{int(sel['assists']) if pd.notna(sel.get('assists')) else '—'}",  delta=_delta("assists"))
+                    m3.metric("Points",    f"{int(sel['points']) if pd.notna(sel.get('points')) else '—'}",    delta=_delta("points"))
+                    m4, m5, m6 = st.columns(3)
+                    m4.metric("Goals/G",   f"{sel['goals_pg']:.2f}"   if pd.notna(sel.get('goals_pg'))   else "—", delta=_delta("goals_pg"))
+                    m5.metric("Assists/G", f"{sel['assists_pg']:.2f}" if pd.notna(sel.get('assists_pg')) else "—", delta=_delta("assists_pg"))
+                    m6.metric("SoG/G",     f"{sel['sog_pg']:.2f}"     if pd.notna(sel.get('sog_pg'))     else "—", delta=_delta("sog_pg"))
+
+                with right_col:
+                    if len(history) > 1:
+                        season_labels = {"2023": "22-23", "2024": "23-24", "2025": "24-25", "2026": "25-26"}
+                        chart_df = history[["season", "goals_pg", "assists_pg", "points_pg"]].copy()
+                        chart_df["season"] = chart_df["season"].map(season_labels).fillna(chart_df["season"])
+                        chart_df = chart_df.set_index("season")
+                        st.line_chart(chart_df, y=["goals_pg", "assists_pg", "points_pg"],
+                                      y_label="Per Game", use_container_width=True, height=200)
+                    else:
+                        st.caption("Only one season of data — trend chart needs 2+ seasons.")
+                st.divider()
+
+        st.divider()
+
+        # Draftable profile fingerprint by position + round
+        if not draftable_summary.empty:
+            st.markdown("**What did NWSL draft picks look like in college? (2021–2024)**")
+            st.caption(
+                "Median stats the season before being drafted, by position and round. "
+                "Use this as a benchmark against current players in the board above."
+            )
+            fp_col_config = {
+                "position_group": st.column_config.TextColumn("Position"),
+                "round":          st.column_config.NumberColumn("Round", format="%d"),
+                "n_players":      st.column_config.NumberColumn("# Matched", format="%d"),
+                "goals_pg":       st.column_config.NumberColumn("Goals/G", format="%.2f"),
+                "assists_pg":     st.column_config.NumberColumn("Ast/G", format="%.2f"),
+                "points_pg":      st.column_config.NumberColumn("Pts/G", format="%.2f"),
+                "sog_pg":         st.column_config.NumberColumn("SoG/G", format="%.2f"),
+                "goals":          st.column_config.NumberColumn("Goals", format="%.1f"),
+                "assists":        st.column_config.NumberColumn("Assists", format="%.1f"),
+                "gp":             st.column_config.NumberColumn("Games", format="%.0f"),
+            }
+            fp_display = [c for c in draftable_summary.columns if c in fp_col_config]
+            st.dataframe(draftable_summary[fp_display], use_container_width=True, hide_index=True,
+                         column_config=fp_col_config)
+
+        st.divider()
+
+        # Biggest improvers
+        st.markdown("**Biggest year-over-year improvers**")
+        st.caption("Players whose goals/game increased most from the prior season.")
+        if not trends.empty:
+            trend_cols = ["name", "school", "season", "prev_goals_pg", "goals_pg", "goals_pg_delta",
+                          "assists_pg_delta", "conference", "position", "class_year"]
+            trend_cols = [c for c in trend_cols if c in trends.columns]
+            st.dataframe(
+                trends[trend_cols].head(20),
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "goals_pg_delta":   st.column_config.NumberColumn("Goals/G Δ", format="%+.2f"),
+                    "assists_pg_delta": st.column_config.NumberColumn("Ast/G Δ", format="%+.2f"),
+                    "prev_goals_pg":    st.column_config.NumberColumn("Prev Goals/G", format="%.2f"),
+                    "goals_pg":         st.column_config.NumberColumn("Curr Goals/G", format="%.2f"),
+                },
+            )
 
 
 # ---------------------------------------------------------------------------
