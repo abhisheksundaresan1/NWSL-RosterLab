@@ -266,20 +266,28 @@ def render_player_card(
     age_str    = f"  ·  Age {int(row['age'])}" if row.get("age") else ""
     hook       = headline_hook(row, cohort, season)
 
-    # Fallback insight if none provided
+    # Fallback insight (2-3 sentences from numbers; used when LLM unavailable)
     if not insight_text:
         action_vals = {c: float(row.get(c, 0.0)) for c in [
             "ga_shooting", "ga_dribbling", "ga_passing",
             "ga_receiving", "ga_interrupting", "ga_fouling"]}
-        top_col = max(action_vals, key=action_vals.get)
-        top_label = ACTION_DISPLAY.get(top_col + "_p90",
-                    top_col.replace("ga_", "").replace("_", " ").title())
+        sorted_actions = sorted(action_vals.items(), key=lambda x: x[1], reverse=True)
+        top_col, top_val = sorted_actions[0]
+        bot_col, bot_val = sorted_actions[-1]
+        top_label = ACTION_DISPLAY.get(top_col + "_p90", top_col.replace("ga_", "").replace("_", " ").title())
+        bot_label = ACTION_DISPLAY.get(bot_col + "_p90", bot_col.replace("ga_", "").replace("_", " ").title())
+        ga_p90    = float(row.get("goals_added_p90", 0))
+        avg_ga    = float(cohort["goals_added_p90"].mean())
+        xga_p90   = float(row.get("xga_p90", 0))
+        avg_xga   = float(cohort["xga_p90"].mean())
+        pct_label = f"top {100 - round(pct):.0f}% of" if rank > 1 else "#1 among"
         insight_text = (
             f"Ranks #{rank} of {n_cohort} {pos_label}s on g+/90 "
-            f"({float(row.get('goals_added_p90', 0)):.3f} vs. position avg "
-            f"{cohort['goals_added_p90'].mean():.3f}), "
-            f"with her strongest contribution from {top_label.lower()} "
-            f"({action_vals[top_col]:+.3f} g+)."
+            f"({ga_p90:.3f} vs. position avg {avg_ga:.3f}), "
+            f"placing her in the {pct_label} all {pos_label}s in the league. "
+            f"Her strongest action type is {top_label.lower()} ({top_val:+.3f} g+), "
+            f"while {bot_label.lower()} is her weakest ({bot_val:+.3f} g+). "
+            f"xG+xA/90 of {xga_p90:.3f} compares to a position average of {avg_xga:.3f}."
         )
 
     # Strip em/en dashes from all text drawn on the card (public-facing)
@@ -370,12 +378,22 @@ def render_player_card(
               fill=TEXT_PRIMARY, spacing=8)
 
     # --- Zone 5b: Stat strip (STAT_Y-FOOTER_Y) ---
-    draw.rectangle([(0, STAT_Y), (CARD_W, FOOTER_Y)], fill=(10, 26, 40, 255))
-    stat_font = _get_font(22)
+    draw.rectangle([(0, STAT_Y), (CARD_W, FOOTER_Y)], fill=(25, 55, 80, 255))
+    # Separator line at top of stat strip
+    draw.line([(0, STAT_Y), (CARD_W, STAT_Y)], fill=(60, 100, 140, 255), width=1)
+    stat_font = _get_font(21)
     bb = draw.textbbox((0, 0), stat_text, font=stat_font)
+    # If text is wider than card, shorten it
+    if bb[2] - bb[0] > CARD_W - 108:
+        stat_text = (
+            f"Min: {int(row.get('minutes_played', 0)):,}"
+            f"   Wtd g+/90: {float(row.get('weighted_ga_p90', 0)):.3f} (avg {avg_wga:.3f})"
+            f"   xG+xA/90: {float(row.get('xga_p90', 0)):.3f} (avg {avg_xga:.3f})"
+        )
+        bb = draw.textbbox((0, 0), stat_text, font=stat_font)
     stat_x = max(54, (CARD_W - (bb[2] - bb[0])) // 2)
     stat_y = STAT_Y + (STAT_H - (bb[3] - bb[1])) // 2
-    draw.text((stat_x, stat_y), stat_text, font=stat_font, fill=(130, 165, 195, 255))
+    draw.text((stat_x, stat_y), stat_text, font=stat_font, fill=(160, 200, 230, 255))
 
     # --- Zone 6: Footer flush at bottom (1270-1350) ---
     _draw_footer(draw, footer_y=FOOTER_Y, footer_h=FOOTER_H)
