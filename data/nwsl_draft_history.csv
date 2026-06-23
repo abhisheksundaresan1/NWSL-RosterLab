@@ -1,0 +1,195 @@
+year,round,pick,player_name,college,nwsl_team
+2021,1,1,Emily Fox,North Carolina,Racing Louisville FC
+2021,1,2,Trinity Rodman,Washington State,Washington Spirit
+2021,1,3,Brianna Pinto,North Carolina,Sky Blue FC
+2021,1,4,Kiki Pickett,Stanford,Kansas City NWSL
+2021,1,5,Emina Ekic,Louisville,Racing Louisville FC
+2021,1,6,Yazmeen Ryan,TCU,Portland Thorns FC
+2021,1,7,Madison Haley,Stanford,Chicago Red Stars
+2021,1,8,Tara McKeown,USC,Washington Spirit
+2021,1,9,Viviana Villacorta,UCLA,Orlando Pride
+2021,1,10,Deanne Rose,Florida,North Carolina Courage
+2021,2,11,Taylor Otto,North Carolina,Racing Louisville FC
+2021,2,12,Sam Coffey,Penn State,Portland Thorns FC
+2021,2,13,Kirsten Davis,Texas Tech,Racing Louisville FC
+2021,2,14,Mikayla Colohan,BYU,Orlando Pride
+2021,2,15,Victoria Pickett,Wisconsin,Kansas City NWSL
+2021,2,16,Lucy Parker,UCLA,Kansas City NWSL
+2021,2,17,Addie McCain,Texas A&M,Kansas City NWSL
+2021,2,18,Kelsey Turnbow,Santa Clara,Chicago Red Stars
+2021,2,19,Anna Heilferty,Boston University,Washington Spirit
+2021,2,20,Alyssa Malonson,Auburn,North Carolina Courage
+2021,3,21,Parker Goins,Arkansas,Racing Louisville FC
+2021,3,22,Amirah Ali,Rutgers,Portland Thorns FC
+2021,3,23,Taryn Torres,Virginia,Sky Blue FC
+2021,3,24,Kerry Abello,Penn State,Orlando Pride
+2021,3,25,Brianna Alger,Washington State,Chicago Red Stars
+2021,3,26,Joelle Anderson,Pepperdine,Houston Dash
+2021,3,27,Makamae Gomera-Stevens,Washington State,Houston Dash
+2021,3,28,Jimena López,Texas A&M,OL Reign
+2021,3,29,Sydney Schneider,UNC Wilmington,Washington Spirit
+2021,3,30,Myra Konte,Vanderbilt,North Carolina Courage
+2021,4,31,Emily Smith,California,Racing Louisville FC
+2021,4,32,Channing Foster,Ole Miss,Chicago Red Stars
+2021,4,33,Delanie Sheehan,UCLA,Sky Blue FC
+2021,4,34,Kaylie Collins,USC,Orlando Pride
+2021,4,35,Alissa Gorzak,Virginia,Chicago Red Stars
+2021,4,36,Alex Loera,Santa Clara,Kansas City NWSL
+2021,4,37,Hannah Betfort,Wake Forest,Portland Thorns FC
+2021,4,38,Brookelynn Entz,Kansas State,Kansas City NWSL
+2021,4,39,Mariana Speckmaier,Clemson,Washington Spirit
+2021,4,40,Tess Boade,Duke,Sky Blue FC
+2022,1,1,Naomi Girma,Stanford,San Diego Wave FC
+2022,1,2,Jaelin Howell,Florida State,Racing Louisville FC
+2022,1,3,Emily Gray,Virginia Tech,North Carolina Courage
+2022,1,4,Savannah DeMelo,USC,Racing Louisville FC
+2022,1,5,Mia Fishel,UCLA,Orlando Pride
+2022,1,6,Diana Ordóñez,Virginia,North Carolina Courage
+2022,1,7,Elyse Bennett,Washington State,Kansas City Current
+2022,1,8,Zsanett Kaján,St. John's,OL Reign
+2022,1,9,Marleen Schimmer,Grand Canyon,San Diego Wave FC
+2022,1,10,Caitlin Cosme,Duke,Orlando Pride
+2022,1,11,Julie Doyle,Santa Clara,Orlando Pride
+2022,1,12,Kaitlin Fregulia,Long Beach State,North Carolina Courage
+2022,2,13,Sydny Nasello,South Florida,Portland Thorns FC
+2022,2,14,Tinaya Alexander,LSU,Washington Spirit
+2022,2,15,Maddie Elwell,Vanderbilt,Washington Spirit
+2022,2,16,Charmé Morgan,Oklahoma State,Racing Louisville FC
+2022,2,17,Chardonnay Curran,Oregon,Kansas City Current
+2022,2,18,Ava Cook,Michigan State,Chicago Red Stars
+2022,2,19,Samantha Fisher,Notre Dame,Chicago Red Stars
+2022,2,20,Claudia Dickey,North Carolina,OL Reign
+2022,2,21,Ryanne Brown,Wake Forest,OL Reign
+2022,2,22,Gabby Provenzano,Rutgers,Portland Thorns FC
+2022,2,23,Lucy Shepherd,Hofstra,Washington Spirit
+2022,2,24,Kelly Ann Livingstone,Georgetown,NJ/NY Gotham FC
+2022,2,25,Sydney Pulver,Washington State,San Diego Wave FC
+2022,2,26,Jordyn Bloomer,Wisconsin,Racing Louisville FC
+2022,3,27,Belle Briede,Stanford,San Diego Wave FC
+2022,3,28,Hope Breslin,Illinois,Angel City FC
+2022,3,29,Haleigh Stackpole,Ole Miss,North Carolina Courage
+2022,3,30,Jenna Menta,Wake Forest,Racing Louisville FC
+2022,3,31,Jada Talley,USC,Orlando Pride
+2022,3,32,Kaile Halvorsen,Santa Clara,OL Reign
+2022,3,33,Olivia Van der Jagt,Washington,OL Reign
+2022,3,34,Hensley Hancuff,Clemson,NJ/NY Gotham FC
+2022,3,35,Sarah Griffith,Purdue,Chicago Red Stars
+2022,3,36,Lily Nabet,Duke,Angel City FC
+2022,3,37,Kayla McKeon,Arkansas,Chicago Red Stars
+2022,3,38,Audrey Harding,UNC Wilmington,Washington Spirit
+2022,4,39,Miri Taylor,Hofstra,Angel City FC
+2022,4,40,Kayla Bruster,Georgia,San Diego Wave FC
+2022,4,41,Jenna Winebrenner,TCU,Kansas City Current
+2022,4,42,Sydney Cummings,Georgetown,Racing Louisville FC
+2022,4,43,Izzy Rodriguez,Ohio State,Kansas City Current
+2022,4,44,Ryan Gareis,South Carolina,Houston Dash
+2022,4,45,Marisa Bova,Purdue,North Carolina Courage
+2022,4,46,Raleigh Loughman,Michigan,NJ/NY Gotham FC
+2022,4,47,Marley Canales,UCLA,OL Reign
+2022,4,48,Natalie Beckman,Denver,Portland Thorns FC
+2022,4,49,Jayda Hylton-Pelaia,Arizona State,Chicago Red Stars
+2022,4,50,Jordan Thompson,Gonzaga,Washington Spirit
+2023,1,1,Alyssa Thompson,Harvard-Westlake School,Angel City FC
+2023,1,2,Michelle Cooper,Duke,Kansas City Current
+2023,1,3,Emily Madril,Florida State,Orlando Pride
+2023,1,4,Jenna Nighswonger,Florida State,NJ/NY Gotham FC
+2023,1,5,Reyna Reyes,Alabama,Portland Thorns FC
+2023,1,6,Olivia Wingate,Notre Dame,North Carolina Courage
+2023,1,7,Penelope Hocking,Penn State,Chicago Red Stars
+2023,1,8,Sydney Collins,California,North Carolina Courage
+2023,1,9,Clara Robbins,Florida State,North Carolina Courage
+2023,1,10,Alexa Spaanstra,Virginia,Kansas City Current
+2023,1,11,Haley Hopkins,Virginia,North Carolina Courage
+2023,1,12,Izzy D'Aquila,Santa Clara,Portland Thorns FC
+2023,2,13,Sierra Enge,Stanford,San Diego Wave FC
+2023,2,14,Grace Yochum,Oklahoma State,Chicago Red Stars
+2023,2,15,Gabrielle Robinson,West Virginia,Kansas City Current
+2023,2,16,Kayla Fischer,Ohio State,Racing Louisville FC
+2023,2,17,Brianna Martinez,Notre Dame,Racing Louisville FC
+2023,2,18,Jordan Silkowitz,Iowa State,Kansas City Current
+2023,2,19,Shae Holmes,Washington,OL Reign
+2023,2,20,Sophie Hirst,Harvard,Houston Dash
+2023,2,21,Messiah Bright,TCU,Orlando Pride
+2023,2,22,Jyllissa Harris,South Carolina,Houston Dash
+2023,2,23,Ally Schlegel,Penn State,Chicago Red Stars
+2023,2,24,Lauren DeBeau,Michigan State,Portland Thorns FC
+2023,3,25,Tori Hansen,North Carolina,Orlando Pride
+2023,3,26,Nicole Douglas,Arizona State,Washington Spirit
+2023,3,27,Angelina Anderson,California,Angel City FC
+2023,3,28,Lyza Bosselmann,Gonzaga,Washington Spirit
+2023,3,29,Jadyn Edwards,New Mexico,Racing Louisville FC
+2023,3,30,Riley Tanner,Alabama,Washington Spirit
+2023,3,31,Riley Parker,Alabama,Racing Louisville FC
+2023,3,32,Lauren Kozal,Michigan State,Portland Thorns FC
+2023,3,33,Lauren Brzykcy,UCLA,San Diego Wave FC
+2023,3,34,Lena Silano,Long Beach State,Washington Spirit
+2023,3,35,Mykiaa Minniss,Washington State,Kansas City Current
+2023,3,36,Lindsi Jennings,LSU,Houston Dash
+2023,4,37,Civana Kuhlmann,Colorado,Washington Spirit
+2023,4,38,Ella Shamburger,Vanderbilt,Kansas City Current
+2023,4,39,Summer Yates,Washington,Orlando Pride
+2023,4,40,Delaney Graham,Duke,Washington Spirit
+2023,4,41,Kristen Scott,UCF,Orlando Pride
+2023,4,42,Rylan Childers,Kansas,Kansas City Current
+2023,4,43,Sophie Jones,Duke,Chicago Red Stars
+2023,4,44,Iliana Hocking,Arizona,NJ/NY Gotham FC
+2023,4,45,Giovanna DeMarco,Wake Forest,San Diego Wave FC
+2023,4,46,Natalie Viggiano,Wisconsin,OL Reign
+2023,4,47,Ashley Orkus,Ole Miss,Kansas City Current
+2023,4,48,Madelyn Desiano,UCLA,Houston Dash
+2024,1,1,Ally Sentnor,North Carolina,Utah Royals
+2024,1,2,Savy King,North Carolina,Bay FC
+2024,1,3,Croix Bethune,Georgia,Washington Spirit
+2024,1,4,Brecken Mozingo,BYU,Utah Royals
+2024,1,5,Hal Hershfelt,Clemson,Washington Spirit
+2024,1,6,Reilyn Turner,UCLA,Racing Louisville FC
+2024,1,7,Kate Wiesner,Penn State,Washington Spirit
+2024,1,8,Maya Doms,Stanford,Bay FC
+2024,1,9,Ally Lemos,UCLA,Orlando Pride
+2024,1,10,Leilanni Nesbeth,Florida State,Chicago Red Stars
+2024,1,11,Payton Linnehan,Penn State,Portland Thorns FC
+2024,1,12,Kennedy Wesley,Stanford,San Diego Wave FC
+2024,1,13,Makenna Morris,Clemson,Washington Spirit
+2024,1,14,Maycee Bell,North Carolina,NJ/NY Gotham FC
+2024,2,15,Jameese Joseph,NC State,Chicago Red Stars
+2024,2,16,Lauren Flynn,Florida State,Utah Royals
+2024,2,17,Sam Meza,North Carolina,Seattle Reign FC
+2024,2,18,Ellie Wheeler,Penn State,Kansas City Current
+2024,2,19,Avery Patterson,North Carolina,Houston Dash
+2024,2,20,Olivia Smith-Griffitts,BYU,Utah Royals
+2024,2,21,Kiki Van Zanten,Notre Dame,Houston Dash
+2024,2,22,Cori Dyke,Penn State,Orlando Pride
+2024,2,23,Olivia Wade-Katoa,BYU,Portland Thorns FC
+2024,2,24,Talia Staude,Virginia,North Carolina Courage
+2024,2,25,Kelsey Kaufusi,Utah State,Portland Thorns FC
+2024,2,26,Emma Jaskaniec,Wisconsin,Utah Royals
+2024,2,27,Maddie Mercado,Notre Dame,Seattle Reign FC
+2024,2,28,Emma Sears,Ohio State,Racing Louisville FC
+2024,3,29,Zoe Burns,USC,Utah Royals
+2024,3,30,Jamie Shepherd,BYU,Bay FC
+2024,3,31,Hannah Anderson,Texas Tech,Chicago Red Stars
+2024,3,32,Halle Mackiewicz,Clemson,Kansas City Current
+2024,3,33,Cristina Roque,Florida State,Utah Royals
+2024,3,34,Caroline Conti,Clemson,Bay FC
+2024,3,35,Anna Podojil,Arkansas,Washington Spirit
+2024,3,36,Amanda West,Pittsburgh,Houston Dash
+2024,3,37,Felicia Knox,Alabama,Angel City FC
+2024,3,38,Heather Hinz,South Carolina,Houston Dash
+2024,3,39,Kat Asman,Penn State,Portland Thorns FC
+2024,3,40,Julia Dorsey,North Carolina,North Carolina Courage
+2024,3,41,Bea Franklin,Arkansas,Chicago Red Stars
+2024,3,42,Mya Jones,Memphis,San Diego Wave FC
+2024,4,43,Makena Carr,Saint Mary's,Seattle Reign FC
+2024,4,44,Jessica Garziano,St. John's,Angel City FC
+2024,4,45,Celia Gaynor,Michigan State,Chicago Red Stars
+2024,4,46,Hope Hisey,Arizona,Kansas City Current
+2024,4,47,Alyssa Bourgeois,Santa Clara,Houston Dash
+2024,4,48,Sam Cary,Iowa,Racing Louisville FC
+2024,4,49,Courtney Brown,Utah,Washington Spirit
+2024,4,50,Alex Kerr,Texas Tech,Orlando Pride
+2024,4,51,Madison Curry,Princeton,Angel City FC
+2024,4,52,Landy Mertz,Pittsburgh,North Carolina Courage
+2024,4,53,Katie Duong,Stanford,Portland Thorns FC
+2024,4,54,Madison White,Texas Tech,Racing Louisville FC
+2024,4,55,Laveni Vaka,BYU,Bay FC
+2024,4,56,Talia Gabarra,UCF,Orlando Pride
