@@ -327,9 +327,10 @@ def render_player_card(
             f"xG+xA/90 of {xga_p90:.2f} compares to a position average of {avg_xga:.2f}."
         )
 
-    # Replace em/en dashes with comma-space; collapse any resulting double spaces
+    # Replace em/en dashes with comma-space; fix any space-before-comma and double spaces
     def _clean(text: str) -> str:
         result = text.replace("—", ", ").replace("–", ", ")
+        result = re.sub(r'\s+,', ',', result)   # "word , " -> "word,"
         return re.sub(r'  +', ' ', result)
 
     hook         = _clean(hook)
