@@ -282,44 +282,79 @@ def render_player_card(
             f"({action_vals[top_col]:+.3f} g+)."
         )
 
+    # Strip em/en dashes from all text drawn on the card (public-facing)
+    def _clean(text: str) -> str:
+        return text.replace("—", ",").replace("–", ",")
+
+    hook         = _clean(hook)
+    insight_text = _clean(insight_text)
+
+    # Truncate insight to first 1-2 sentences (~180 chars max), cut on sentence boundary
+    _sentences = insight_text.replace("! ", ". ").replace("? ", ". ").split(". ")
+    _card_take = ""
+    for _s in _sentences:
+        candidate = (_card_take + (" " if _card_take else "") + _s.strip()).strip()
+        if len(candidate) <= 180:
+            _card_take = candidate
+        else:
+            break
+    if not _card_take:
+        _card_take = insight_text[:180]
+    if _card_take and not _card_take.endswith("."):
+        _card_take += "."
+
+    # Layout constants
+    FOOTER_Y  = 1270
+    FOOTER_H  = 80      # 1270-1350
+    TAKE_Y    = 760
+    TAKE_H    = FOOTER_Y - TAKE_Y   # 510px for scout take
+
     # Canvas
     img  = Image.new("RGBA", (CARD_W, CARD_H), BG_COLOR)
     draw = ImageDraw.Draw(img)
 
-    # --- Zone 1: Header (0–220) ---
+    # --- Zone 1: Header (0-220) ---
     _draw_header(draw, img, team_color, hook, header_h=220)
 
-    # --- Zone 2: Identity (220–340) ---
+    # --- Zone 2: Identity (220-340) ---
     name_font = _get_bold_font(48)
-    draw.text((54, 232), str(row.get("player_name", "")),
+    draw.text((54, 232), _clean(str(row.get("player_name", ""))),
               font=name_font, fill=TEXT_PRIMARY)
     sub_font = _get_font(28)
-    sub_text = (f"{row.get('team_name', '')}  ·  {pos_label}"
-                f"{age_str}  ·  {season}")
+    sub_text = _clean(f"{row.get('team_name', '')}  ·  {pos_label}{age_str}  ·  {season}")
     draw.text((54, 292), sub_text, font=sub_font, fill=TEXT_SECONDARY)
 
-    # --- Zone 3: Value banner (340–440) ---
+    # --- Zone 3: Value banner (340-440) ---
     draw.rectangle([(0, 340), (CARD_W, 440)], fill=(20, 45, 65, 255))
     val_font  = _get_bold_font(44)
     rank_font = _get_font(30)
     vs = float(row.get("value_score", 0))
-    draw.text((54, 352), f"{vs:+.2f}", font=val_font, fill=(255, 255, 180, 255))
-    rank_text = f"#{rank} of {n_cohort} {pos_label}s  ·  Top {100 - round(pct)}%"
-    draw.text((220, 362), rank_text, font=rank_font, fill=TEXT_SECONDARY)
+    # Label + number
+    label_font = _get_font(20)
+    draw.text((54, 348), "Value score", font=label_font, fill=TEXT_SECONDARY)
+    draw.text((54, 368), f"{vs:+.2f}", font=val_font, fill=(255, 255, 180, 255))
+    # Rank + percentile pill — omit percentile when rank==1 (would show "Top 0%")
+    if rank == 1:
+        rank_text = f"#{rank} of {n_cohort} {pos_label}s"
+    else:
+        rank_text = f"#{rank} of {n_cohort} {pos_label}s  ·  Top {100 - round(pct)}%"
+    draw.text((220, 378), rank_text, font=rank_font, fill=TEXT_SECONDARY)
 
-    # --- Zone 4: Action chart (440–740) ---
+    # --- Zone 4: Action chart (440-760) ---
     chart_img = _action_bar_chart(row, cohort)
-    chart_img = chart_img.resize((CARD_W - 80, 280), Image.LANCZOS)
+    chart_img = chart_img.resize((CARD_W - 80, 300), Image.LANCZOS)
     img.paste(chart_img, (40, 448))
 
-    # --- Zone 5: Scout take (740–940) ---
-    draw.rectangle([(0, 740), (CARD_W, 940)], fill=(16, 36, 52, 255))
-    take_font = _get_font(28)
-    wrapped   = textwrap.fill(insight_text, width=52)
-    draw.text((54, 758), wrapped, font=take_font, fill=TEXT_PRIMARY, spacing=8)
+    # --- Zone 5: Scout take (760-1270) ---
+    draw.rectangle([(0, TAKE_Y), (CARD_W, FOOTER_Y)], fill=(16, 36, 52, 255))
+    take_font = _get_font(30)
+    wrapped   = textwrap.fill(_card_take, width=48)
+    # Clamp text so it never paints into the footer band
+    draw.text((54, TAKE_Y + 24), wrapped, font=take_font,
+              fill=TEXT_PRIMARY, spacing=10)
 
-    # --- Zone 6: Footer (940–1020) ---
-    _draw_footer(draw, footer_y=940, footer_h=80)
+    # --- Zone 6: Footer flush at bottom (1270-1350) ---
+    _draw_footer(draw, footer_y=FOOTER_Y, footer_h=FOOTER_H)
 
     # Serialize
     buf = io.BytesIO()
