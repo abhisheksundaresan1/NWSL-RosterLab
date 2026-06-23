@@ -116,11 +116,9 @@ def get_insight(player_name: str, season: str, min_minutes: int, position: str) 
         return None
 
 
-_CARD_VERSION = "3"  # bump when render_player_card layout changes to bust the cache
-
-@st.cache_data(show_spinner=False)
-def _cached_player_card(player_name: str, season: str, min_minutes: int, position: str, card_version: str = _CARD_VERSION) -> bytes:
-    """Cache rendered PNG bytes. card_version is hashed — bump _CARD_VERSION to invalidate old PNGs."""
+@st.cache_data(show_spinner=False, ttl=3600)
+def _cached_player_card(player_name: str, season: str, min_minutes: int, position: str) -> bytes:
+    """Cache rendered PNG bytes for up to 1 hour. Expires automatically so stale PNGs never persist."""
     from src.share.card import render_player_card
     full   = load_value_table(min_minutes, season)
     cohort = rank_by_position(full, position).copy()
