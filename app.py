@@ -264,7 +264,10 @@ with tab_rankings:
 
     pos_label = POSITION_LABELS[selected_pos]
     st.subheader(f"{len(ranked)} {pos_label}s ranked by value score")
-    st.caption(f"Data: American Soccer Analysis — {season} NWSL season.")
+    st.caption(
+        f"Data: American Soccer Analysis — {season} NWSL season. "
+        "Players with limited NWSL minutes or not tracked by ASA may be absent."
+    )
 
     with st.expander("What does the value score measure? (and its limits)", expanded=False):
         st.markdown(f"""
@@ -710,14 +713,19 @@ with tab_validation:
     # -----------------------------------------------------------------------
     st.divider()
     st.markdown("### Headline — First XI outfielders (pooled across all seasons)")
-    st.caption("Hit-rate = % of matched First XI outfielders ranking in the top-N of their bucket (DEF or MF/FW). GKs excluded.")
+    st.caption(
+        "Slot-matched hit-rate = % of matched First XI players ranked within their bucket's Best XI quota "
+        "(DEF top-4, MF/FW top-6). Median rank percentile = median rank ÷ bucket size. GKs excluded."
+    )
 
     c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Top-3 hit-rate",   _pct(v.get("pooled_hit_rate_top3")),  help="First XI players ranking top-3 in their bucket")
-    c2.metric("Top-5 hit-rate",   _pct(v.get("pooled_hit_rate_top5")),  help="First XI players ranking top-5 in their bucket")
-    c3.metric("Median rank",      _fmt(v.get("median_rank"), 1),        help="Median within-bucket rank of matched First XI players")
-    c4.metric("ROC-AUC",          _fmt(v.get("roc_auc"), 3),            help="Pooled across all seasons/positions (0.5 = random, 1.0 = perfect)")
-    c5.metric("Matched",          str(v.get("n_first_matched", "—")),   help="# First XI outfield players matched to ASA dataset")
+    slot_pct = v.get("median_rank_pct")
+    slot_str = f"{slot_pct:.1%}" if slot_pct is not None else "—"
+    c1.metric("Slot-matched",     _pct(v.get("pooled_hit_rate_slot_matched")), help="% ranked within Best XI quota for their bucket (DEF≤4, MF/FW≤6)")
+    c2.metric("Median rank %ile", slot_str,                                    help="Median within-bucket rank ÷ bucket size — lower is better")
+    c3.metric("ROC-AUC",          _fmt(v.get("roc_auc"), 3),                   help="Pooled across all seasons/positions (0.5 = random, 1.0 = perfect)")
+    c4.metric("Top-3 hit-rate",   _pct(v.get("pooled_hit_rate_top3")),         help="Secondary: % ranking top-3 in bucket")
+    c5.metric("Matched",          str(v.get("n_first_matched", "—")),          help="# First XI outfield players matched to ASA dataset")
 
     # -----------------------------------------------------------------------
     # Row 2: Bucket breakdown
@@ -729,6 +737,7 @@ with tab_validation:
     with col_def:
         st.markdown("**Defenders (CB + FB → DEF)**")
         st.info(
+            f"Slot-matched (top-4): **{_pct(v.get('defender_hit_rate_slot_matched'))}** &nbsp;|&nbsp; "
             f"Top-3: **{_pct(v.get('defender_hit_rate_top3'))}** &nbsp;|&nbsp; "
             f"Top-5: **{_pct(v.get('defender_hit_rate_top5'))}**"
         )
@@ -737,6 +746,7 @@ with tab_validation:
     with col_mf:
         st.markdown("**Midfielders & Forwards (DM/CM/AM/W/ST → MF/FW)**")
         st.info(
+            f"Slot-matched (top-6): **{_pct(v.get('mffw_hit_rate_slot_matched'))}** &nbsp;|&nbsp; "
             f"Top-3: **{_pct(v.get('mffw_hit_rate_top3'))}** &nbsp;|&nbsp; "
             f"Top-5: **{_pct(v.get('mffw_hit_rate_top5'))}**"
         )
@@ -822,13 +832,29 @@ with tab_validation:
     # -----------------------------------------------------------------------
     unmatched_list = v.get("unmatched", [])
     if unmatched_list:
-        with st.expander(f"Unmatched Best XI players ({len(unmatched_list)}) — alias candidates", expanded=False):
-            st.caption("These players were not found in the ASA dataset (name mismatch or below minutes threshold). Add correct ASA names to data/validation/name_aliases.csv to improve coverage.")
+        diag_counts = {}
+        for u in unmatched_list:
+            d = u.get("diagnosis", "?")
+            diag_counts[d] = diag_counts.get(d, 0) + 1
+        diag_summary = ", ".join(f"{v} {k}" for k, v in diag_counts.items())
+        with st.expander(
+            f"Unmatched Best XI players ({len(unmatched_list)}: {diag_summary})",
+            expanded=False,
+        ):
+            st.caption(
+                "ABSENT = not found in ASA's player database at all (unexplained tracking gap). "
+                "NAME-MISMATCH = present in ASA but below the minutes threshold that season. "
+                "Add aliases to data/validation/name_aliases.csv to fix mismatches."
+            )
             for u in unmatched_list:
+                diag = u.get("diagnosis", "?")
+                mins = u.get("actual_minutes")
+                mins_str = f" — {int(mins)} min" if mins is not None else ""
                 cands = ", ".join(u["candidates"]) if u["candidates"] else "no close matches"
+                badge = "🔴" if diag == "ABSENT" else "🟡"
                 st.markdown(
-                    f"**{u['best_xi_name']}** ({u['season']} {u['team_selection']} {u['position_group']}) "
-                    f"→ candidates: _{cands}_"
+                    f"{badge} **{u['best_xi_name']}** ({u['season']} {u['team_selection']} "
+                    f"{u['position_group']}) `{diag}`{mins_str} → _{cands}_"
                 )
 
     # -----------------------------------------------------------------------

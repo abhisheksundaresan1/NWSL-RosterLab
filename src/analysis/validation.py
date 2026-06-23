@@ -13,6 +13,10 @@ Hit-rate definition:
   above the min_minutes threshold). Unmatched players are listed separately.
   Headline numbers use First XI only; Second XI shown as a softer supplementary tier.
 
+  BUCKET_SLOTS defines how many Best XI spots each bucket has (DEF=4, MF/FW=6).
+  Slot-matched hit-rate = % of matched First XI players ranked <= BUCKET_SLOTS[bucket].
+  Median rank is also expressed as a percentile of the bucket population.
+
 AUC: manual Wilcoxon-Mann-Whitney implementation (no sklearn).
 Spearman: pandas .corr(method='spearman').
 """
@@ -36,6 +40,9 @@ from src.data.ground_truth import (
 _VALIDATION_CACHE = (
     Path(__file__).resolve().parents[2] / "data" / "validation" / "validation_cache.json"
 )
+
+# How many First XI slots each collapsed bucket has
+BUCKET_SLOTS: dict[str, int] = {"DEF": 4, "MF/FW": 6}
 
 # ---------------------------------------------------------------------------
 # Bucket collapse
@@ -137,14 +144,18 @@ def run_validation(
     dict with keys:
       pooled_hit_rate_top3, pooled_hit_rate_top5   -- First XI only
       pooled_hit_rate_top3_second, pooled_hit_rate_top5_second  -- Second XI
+      pooled_hit_rate_slot_matched  -- HEADLINE: % ranked <= BUCKET_SLOTS[bucket]
+      median_rank, median_rank_pct  -- HEADLINE: median rank + percentile of bucket size
       per_season           -- {season: {top3, top5, n_matched, n_unmatched, ...}}
       defender_hit_rate_top3, defender_hit_rate_top5  -- First XI DEF bucket
+      defender_hit_rate_slot_matched                  -- DEF: % ranked <= 4
       mffw_hit_rate_top3, mffw_hit_rate_top5          -- First XI MF/FW bucket
-      median_rank          -- median within-bucket rank of matched First XI players
+      mffw_hit_rate_slot_matched                      -- MF/FW: % ranked <= 6
       roc_auc              -- pooled across all seasons
       team_spearman_rho, team_spearman_p  -- team-aggregate correlation
       best_xi_ranked       -- DataFrame of all Best XI players with our rank
-      unmatched            -- list of {best_xi_name, season, team_selection, candidates}
+      unmatched            -- list of {best_xi_name, season, team_selection,
+                                       diagnosis, actual_minutes, candidates}
     """
     from src.data.sources import (
         fetch_player_goals_added,
@@ -199,7 +210,29 @@ def run_validation(
             ascending=False, method="min"
         )
 
+        # Bucket sizes (for percentile computation)
+        bucket_sizes = outfield.groupby("bucket").size().to_dict()
+
         asa_index = _build_asa_name_index(outfield)
+
+        # Full (unfiltered) value table for unmatched diagnosis
+        try:
+            vt_full = build_player_value_table(
+                ga, xg, pl, tm,
+                birthdates=bd,
+                min_minutes=0,
+                season=str(season),
+            )
+            full_asa_index = _build_asa_name_index(vt_full)
+            # minutes lookup: normalized_name -> minutes_played
+            minutes_lookup = {
+                normalize_name(row["player_name"]): row["minutes_played"]
+                for _, row in vt_full.iterrows()
+            }
+        except Exception:
+            vt_full = pd.DataFrame()
+            full_asa_index = asa_index
+            minutes_lookup = {}
 
         # ---- AUC: label First XI players ----
         season_best_xi = best_xi_all[best_xi_all["season"] == season]
@@ -222,12 +255,24 @@ def run_validation(
             asa_name = _resolve_name(bxi["player_name"], asa_index, alias_map)
 
             if asa_name is None:
+                # Diagnose against full (unfiltered) player list
+                full_match = _resolve_name(bxi["player_name"], full_asa_index, alias_map)
+                norm_bxi = normalize_name(bxi["player_name"])
+                actual_minutes = minutes_lookup.get(
+                    normalize_name(full_match) if full_match else norm_bxi
+                )
+                if full_match is not None:
+                    diagnosis = "NAME-MISMATCH"
+                else:
+                    diagnosis = "ABSENT"
                 unmatched.append({
                     "best_xi_name": bxi["player_name"],
                     "season": season,
                     "team_selection": bxi["team_selection"],
                     "position_group": bxi["position_group"],
-                    "candidates": _alias_candidates(bxi["player_name"], asa_index),
+                    "diagnosis": diagnosis,
+                    "actual_minutes": actual_minutes,
+                    "candidates": _alias_candidates(bxi["player_name"], full_asa_index),
                 })
                 record = {
                     "season": season,
@@ -236,6 +281,7 @@ def run_validation(
                     "best_xi_name": bxi["player_name"],
                     "asa_name": None,
                     "bucket_rank": None,
+                    "bucket_size": None,
                     "value_score": None,
                     "matched": False,
                     "below_minutes": False,
@@ -244,12 +290,16 @@ def run_validation(
                 player_row = outfield[outfield["player_name"] == asa_name]
 
                 if player_row.empty:
-                    # Player exists in ASA but below min_minutes threshold
+                    # Player found in ASA but below min_minutes threshold
+                    norm_asa = normalize_name(asa_name)
+                    actual_minutes = minutes_lookup.get(norm_asa)
                     unmatched.append({
                         "best_xi_name": bxi["player_name"],
                         "season": season,
                         "team_selection": bxi["team_selection"],
                         "position_group": bxi["position_group"],
+                        "diagnosis": "BELOW-MINUTES",
+                        "actual_minutes": actual_minutes,
                         "candidates": [asa_name],
                     })
                     record = {
@@ -259,12 +309,14 @@ def run_validation(
                         "best_xi_name": bxi["player_name"],
                         "asa_name": asa_name,
                         "bucket_rank": None,
+                        "bucket_size": None,
                         "value_score": None,
                         "matched": False,
                         "below_minutes": True,
                     }
                 else:
                     pr = player_row.iloc[0]
+                    bkt = pr["bucket"]
                     record = {
                         "season": season,
                         "team_selection": bxi["team_selection"],
@@ -272,6 +324,7 @@ def run_validation(
                         "best_xi_name": bxi["player_name"],
                         "asa_name": asa_name,
                         "bucket_rank": int(pr["bucket_rank"]),
+                        "bucket_size": bucket_sizes.get(bkt),
                         "value_score": round(float(pr["value_score"]), 3),
                         "matched": True,
                         "below_minutes": False,
@@ -362,6 +415,33 @@ def run_validation(
 
     matched_first = all_ranks_df[(all_ranks_df["team_selection"] == "first") & all_ranks_df["matched"]] if not all_ranks_df.empty else pd.DataFrame()
 
+    # Slot-matched hit-rate: bucket_rank <= BUCKET_SLOTS[bucket]
+    def _slot_matched(df: pd.DataFrame) -> float | None:
+        if df.empty:
+            return None
+        hits = sum(
+            1 for _, r in df.iterrows()
+            if r["bucket_rank"] is not None
+            and r["position_group"] in BUCKET_SLOTS
+            and r["bucket_rank"] <= BUCKET_SLOTS[r["position_group"]]
+        )
+        return round(hits / len(df), 3)
+
+    def _bucket_slot_matched(df: pd.DataFrame, bucket: str) -> float | None:
+        sub = df[df["position_group"] == bucket] if not df.empty else pd.DataFrame()
+        if sub.empty:
+            return None
+        slots = BUCKET_SLOTS.get(bucket, 5)
+        return round((sub["bucket_rank"] <= slots).mean(), 3)
+
+    # Median rank percentile
+    median_rank_val = float(matched_first["bucket_rank"].median()) if not matched_first.empty else None
+    if median_rank_val is not None and "bucket_size" in matched_first.columns:
+        median_bucket_size = float(matched_first["bucket_size"].median())
+        median_rank_pct = round(median_rank_val / median_bucket_size, 3) if median_bucket_size > 0 else None
+    else:
+        median_rank_pct = None
+
     # AUC
     roc_auc = _manual_auc(auc_scores, auc_labels) if auc_scores else float("nan")
 
@@ -387,19 +467,24 @@ def run_validation(
         spearman_p   = float("nan")
 
     return {
-        # Pooled First XI
+        # HEADLINE metrics
+        "pooled_hit_rate_slot_matched": _slot_matched(matched_first),
+        "median_rank":     median_rank_val,
+        "median_rank_pct": median_rank_pct,
+        # Pooled First XI (secondary)
         "pooled_hit_rate_top3":  _pooled_hit_rates(all_ranks_df, "first", 3),
         "pooled_hit_rate_top5":  _pooled_hit_rates(all_ranks_df, "first", 5),
         # Pooled Second XI (softer tier)
         "pooled_hit_rate_top3_second": _pooled_hit_rates(all_ranks_df, "second", 3),
         "pooled_hit_rate_top5_second": _pooled_hit_rates(all_ranks_df, "second", 5),
         # Bucket breakdown (First XI)
-        "defender_hit_rate_top3": _pooled_bucket_hit_rate(all_ranks_df, "DEF", 3),
-        "defender_hit_rate_top5": _pooled_bucket_hit_rate(all_ranks_df, "DEF", 5),
-        "mffw_hit_rate_top3":     _pooled_bucket_hit_rate(all_ranks_df, "MF/FW", 3),
-        "mffw_hit_rate_top5":     _pooled_bucket_hit_rate(all_ranks_df, "MF/FW", 5),
+        "defender_hit_rate_top3":        _pooled_bucket_hit_rate(all_ranks_df, "DEF", 3),
+        "defender_hit_rate_top5":        _pooled_bucket_hit_rate(all_ranks_df, "DEF", 5),
+        "defender_hit_rate_slot_matched": _bucket_slot_matched(matched_first, "DEF"),
+        "mffw_hit_rate_top3":            _pooled_bucket_hit_rate(all_ranks_df, "MF/FW", 3),
+        "mffw_hit_rate_top5":            _pooled_bucket_hit_rate(all_ranks_df, "MF/FW", 5),
+        "mffw_hit_rate_slot_matched":    _bucket_slot_matched(matched_first, "MF/FW"),
         # Aggregate stats
-        "median_rank":    float(matched_first["bucket_rank"].median()) if not matched_first.empty else None,
         "n_first_matched": int(matched_first.shape[0]) if not matched_first.empty else 0,
         "roc_auc":        round(roc_auc, 3) if not (roc_auc != roc_auc) else None,
         "team_spearman_rho": round(spearman_rho, 3) if not (spearman_rho != spearman_rho) else None,
@@ -467,37 +552,37 @@ if __name__ == "__main__":
 
     result = run_validation(min_minutes=500)
 
-    print(f"\n--- Pooled hit-rates (First XI outfielders only) ---")
-    print(f"  Top-3: {result['pooled_hit_rate_top3']}")
-    print(f"  Top-5: {result['pooled_hit_rate_top5']}")
-    print(f"  n matched: {result['n_first_matched']}")
+    print(f"\n=== HEADLINE metrics ===")
+    print(f"  ROC-AUC:              {result['roc_auc']}")
+    print(f"  Team Spearman rho:    {result['team_spearman_rho']}  p={result['team_spearman_p']}  n={result['team_n_observations']}")
+    print(f"  Slot-matched hit-rate (pooled): {result['pooled_hit_rate_slot_matched']}")
+    print(f"    DEF  (top-4):  {result['defender_hit_rate_slot_matched']}")
+    print(f"    MF/FW (top-6): {result['mffw_hit_rate_slot_matched']}")
+    pct = result['median_rank_pct']
+    print(f"  Median rank percentile: {f'{pct:.1%}' if pct else 'N/A'}  (raw rank: {result['median_rank']})")
+    print(f"  n matched First XI: {result['n_first_matched']}")
+
+    print(f"\n--- Secondary hit-rates (First XI) ---")
+    print(f"  Top-3: {result['pooled_hit_rate_top3']}   Top-5: {result['pooled_hit_rate_top5']}")
+    print(f"  Defender  Top-3: {result['defender_hit_rate_top3']}   Top-5: {result['defender_hit_rate_top5']}")
+    print(f"  MF/FW     Top-3: {result['mffw_hit_rate_top3']}   Top-5: {result['mffw_hit_rate_top5']}")
 
     print(f"\n--- Second XI (softer tier) ---")
-    print(f"  Top-3: {result['pooled_hit_rate_top3_second']}")
-    print(f"  Top-5: {result['pooled_hit_rate_top5_second']}")
-
-    print(f"\n--- Defender bucket (First XI) ---")
-    print(f"  Top-3: {result['defender_hit_rate_top3']}")
-    print(f"  Top-5: {result['defender_hit_rate_top5']}")
-
-    print(f"\n--- MF/FW bucket (First XI) ---")
-    print(f"  Top-3: {result['mffw_hit_rate_top3']}")
-    print(f"  Top-5: {result['mffw_hit_rate_top5']}")
-
-    print(f"\n--- Aggregate ---")
-    print(f"  Median within-bucket rank: {result['median_rank']}")
-    print(f"  ROC-AUC: {result['roc_auc']}")
-    print(f"  Team Spearman rho: {result['team_spearman_rho']}  p={result['team_spearman_p']}  n={result['team_n_observations']}")
+    print(f"  Top-3: {result['pooled_hit_rate_top3_second']}   Top-5: {result['pooled_hit_rate_top5_second']}")
 
     print(f"\n--- Per-season ---")
     for season, metrics in sorted(result["per_season"].items()):
         first = metrics["first"]
         print(f"  {season}: top3={first['top3']}  top5={first['top5']}  matched={first['n_matched']}  unmatched={first['n_unmatched']}")
 
-    print(f"\n--- Unmatched Best XI players ---")
+    print(f"\n--- Unmatched Best XI players (with diagnosis) ---")
     for u in result["unmatched"]:
-        cands = ", ".join(u["candidates"]) if u["candidates"] else "none"
-        print(f"  [{u['season']} {u['team_selection']} {u['position_group']}] '{u['best_xi_name']}' -> candidates: {cands}")
+        cands = ", ".join(u.get("candidates", [])) or "none"
+        mins  = u.get("actual_minutes")
+        mins_str = f"{int(mins)} min" if mins is not None else "? min"
+        diag  = u.get("diagnosis", "?")
+        print(f"  [{u['season']} {u['team_selection']:6s} {u['position_group']:5s}] "
+              f"{u['best_xi_name']:<22s}  {diag:<15s} {mins_str:>8s}  -> {cands}")
 
     print(f"\n--- Sanity check: Chawinga / Banda / S. Smith ---")
     df = result["best_xi_ranked"]

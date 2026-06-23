@@ -103,10 +103,20 @@ Implemented in `src/data/ground_truth.py` (ingest) + `src/analysis/validation.py
 - Team Spearman ρ (pandas `.corr(method='spearman')`) between team-mean value_score and regular-season points
 
 **Observed results (500-minute threshold, 2019–2025):**
-- Pooled top-3 hit-rate: ~15% (≈3× better than random for bucket sizes of 40–100 players)
+- Pooled top-3 hit-rate: 17.5% (post alias fix); top-5: 24.6%
+- Slot-matched hit-rate (pooled): 22.8% (DEF top-4: 13%, MF/FW top-6: 29.4%)
+- Median rank percentile: 14.1% — median Best XI player ranks in the top 14% of their bucket
 - ROC-AUC: 0.793 — model clearly separates Best XI caliber from non-Best XI
+- n matched First XI: 57 (up from 53 before alias fixes)
 - Team Spearman ρ: 0.61 (p≈0, n=34 team-seasons) — high-value rosters win more points
 - Defender bucket hit-rate is the weakest (expected: off-ball defending is under-measured by g+)
+
+**Known ASA name errors (confirmed via raw API investigation):**
+- `get_players(leagues="nwsl")` returns 1,150 rows — no pagination issue. `minimum_minutes` default is already 0.
+- **Sophia Smith is tracked in ASA as "Sophia Wilson"** (player_id `7vQ7rOwOqD`). Evidence: position=ST, Portland Thorns, 18 goals in 2022 (MVP season), active 2020–2024/2026. The real Sophia Wilson is a midfielder — different person. Our alias `Sophia Smith → Sophia Wilson` in `name_aliases.csv` corrects this.
+- **Mallory Pugh/Swanson is tracked in ASA as "Mal Swanson"** (W, Chicago Stars FC). Alias `Mallory Pugh/Swanson → Mal Swanson` in `name_aliases.csv` corrects this.
+- Sophia Wilson (ASA name for Sophia Smith) does NOT appear in 2025 season data — she likely missed the 2025 NWSL season.
+- Other marquee 2025 players (Chawinga, Hutton, Coffey, Moultrie) are correctly tracked.
 
 **JSON cache:** `data/validation/validation_cache.json` — persisted after each run for instant cold loads in the UI. Re-run from the "Model Validation" tab's "Re-run validation" button.
 
