@@ -251,7 +251,7 @@ else:
 # Main area — tabbed layout
 # ---------------------------------------------------------------------------
 
-tab_rankings, tab_draft, tab_scout, tab_validation = st.tabs(["Player Rankings", "Draft Board", "Scout Assistant", "Model Validation"])
+tab_rankings, tab_draft, tab_scout, tab_validation, tab_about = st.tabs(["Player Rankings", "Draft Board", "Scout Assistant", "Model Validation", "About"])
 
 # ---------------------------------------------------------------------------
 # Tab 1: Player Rankings (all existing content, unchanged)
@@ -890,3 +890,66 @@ Hit-rate is computed only over the matched subset, which may be biased toward hi
 **Team correlation uses regular-season points.** Playoff performance, home/away splits, and
 strength-of-schedule are not accounted for.
         """.format(n_unmatched=len(unmatched_list)))
+
+# ---------------------------------------------------------------------------
+# Tab 5: About
+# ---------------------------------------------------------------------------
+with tab_about:
+    st.markdown("## About NWSL RosterLab")
+    st.markdown(
+        "_\"Goals added by the players. Words added by Claude. Value added by, hopefully, me.\"_"
+    )
+    st.markdown(
+        "NWSL RosterLab turns free public data into ranked, explained, position-aware player value "
+        "for the National Women's Soccer League. It also has an AI scout assistant you can ask things "
+        'like "find me a ball-progressing center back under 23."'
+    )
+
+    st.markdown("### Why I built it")
+    st.markdown(
+        "I'm a product manager, and I'm a little obsessed with soccer. The NWSL is one of the "
+        "fastest-rising leagues in American sports, and it just reshaped its roster rules: no more "
+        "college draft, new free agency, a tight salary cap. But the public tools for understanding "
+        "player value are still raw stat tables built for analysts, and the polished ones (Wyscout, "
+        "StatsBomb, Opta) cost far more than fans or smaller clubs can spend. RosterLab is my attempt "
+        "to close that gap with something opinionated, transparent, and free."
+    )
+
+    st.markdown("### How the value score works")
+    st.markdown(
+        "Every player's value starts from American Soccer Analysis's Goals Added (g+), a measure of "
+        "total on-ball contribution across six action types: shooting, dribbling, passing, receiving, "
+        "defending, and fouling. I convert those to per-90, weight them by position (a center back is "
+        "judged mostly on defending and progression, a striker on finishing), and standardize within "
+        "position into a single value score. The weights are an editorial scouting judgment, not a "
+        "black box, so you are free to disagree with them. The plain-English note on each player is "
+        "written by an AI layer that only phrases the numbers already computed. It never invents a stat."
+    )
+
+    st.markdown("### Does it hold up?")
+    st.markdown(
+        "I tested the value score against six seasons of NWSL Best XI selections, 2019 through 2025. "
+        "It ranks a Best XI player above a non-selected player 79% of the time (ROC-AUC 0.79), puts "
+        "Best XI players in the top 14% of their position, and rates winning rosters higher (Spearman "
+        "correlation of 0.61). As a gut check, it independently rates 2022 MVP Sophia Smith (Wilson) "
+        "as the league's number one striker in both 2022 and 2023. The Model Validation tab has the "
+        "full breakdown. It is weakest on pure defenders, because on-ball data under-measures "
+        "off-ball defending."
+    )
+
+    st.markdown("### Data and limitations")
+    st.markdown(
+        "Player metrics come from American Soccer Analysis (g+, xG, xA). Ages come from Wikidata. "
+        "ASA uses players' current names, so some appear under a married name (for example, Sophia "
+        "Wilson). Players with limited NWSL minutes, or who are not tracked by ASA, may be missing. "
+        "This was built independently using public data. It is not affiliated with or endorsed by the "
+        "NWSL, any club, or American Soccer Analysis."
+    )
+
+    st.divider()
+    st.markdown(
+        "Built by **Abhishek Sundaresan**. "
+        "[LinkedIn](https://www.linkedin.com/in/abhisheksundaresan) · "
+        "[GitHub](https://github.com/abhisheksundaresan1/NWSL-RosterLab)"
+    )
+    st.markdown("Feedback is welcome, especially from NWSL fans and people working in soccer analytics.")
