@@ -13,6 +13,7 @@ outside Streamlit (SPA injection into <body> is invisible to crawlers). Out of s
 from __future__ import annotations
 
 import io
+import re
 import textwrap
 from typing import Optional
 
@@ -146,6 +147,39 @@ def headline_hook(row: dict, cohort: pd.DataFrame, season: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Private: text helpers
+# ---------------------------------------------------------------------------
+
+def _trim_sentences(text: str, max_sentences: int = 3) -> str:
+    """Keep first max_sentences sentences. Preserves punctuation."""
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    return " ".join(sentences[:max_sentences])
+
+
+def _verdict(row: dict, cohort: pd.DataFrame, pos_label: str) -> str:
+    """One bold quotable sentence, ≤8 words. Fully deterministic from rank + actions."""
+    rank  = int(row["_rank"])
+    n     = len(cohort)
+    pct   = (1 - (rank - 1) / max(n - 1, 1)) * 100
+
+    action_vals = {c: float(row.get(c, 0.0)) for c in ACTION_COLS}
+    top_col   = max(action_vals, key=action_vals.get)
+    top_label = ACTION_DISPLAY[top_col].lower()
+    bot_col   = min(action_vals, key=action_vals.get)
+    bot_label = ACTION_DISPLAY[bot_col].lower()
+
+    if pct >= 95:
+        return f"Elite {pos_label.lower()}, leads in {top_label}."
+    if pct >= 80:
+        return f"Top-tier {pos_label.lower()}, driven by {top_label}."
+    if pct >= 60:
+        return f"Above-average value, best at {top_label}."
+    if pct >= 40:
+        return f"Mid-tier; {top_label} is her best asset."
+    return f"Below average; {top_label} strength, {bot_label} weakness."
+
+
+# ---------------------------------------------------------------------------
 # Private: action bar chart -> PIL Image
 # ---------------------------------------------------------------------------
 
@@ -157,7 +191,7 @@ def _action_bar_chart(row: dict, cohort: pd.DataFrame) -> Image.Image:
     colors = [ACCENT_NEG if v < 0 else ACCENT_POS for v in vals]
 
     bg = tuple(c / 255 for c in BG_COLOR[:3])
-    fig, ax = plt.subplots(figsize=(9.5, 2.6), facecolor=bg)
+    fig, ax = plt.subplots(figsize=(9.5, 3.2), facecolor=bg)
     ax.set_facecolor(bg)
 
     y_pos = range(len(labels))
@@ -169,15 +203,17 @@ def _action_bar_chart(row: dict, cohort: pd.DataFrame) -> Image.Image:
                 color=ACCENT_AVG, linewidth=1.5, zorder=3)
 
     ax.set_yticks(list(y_pos))
-    ax.set_yticklabels(labels, color="white", fontsize=10,
+    ax.set_yticklabels(labels, color="white", fontsize=13,
                        fontfamily="DejaVu Sans")
-    ax.tick_params(axis="x", colors="#aaaaaa", labelsize=8)
+    ax.tick_params(axis="x", colors="#aaaaaa", labelsize=11)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.spines["left"].set_visible(False)
     ax.spines["bottom"].set_color("#444444")
     ax.axvline(0, color="#555555", linewidth=0.8, zorder=1)
-    ax.set_xlabel("g+ per 90", color="#aaaaaa", fontsize=8, fontfamily="DejaVu Sans")
+    ax.set_xlabel("g+ per 90", color="#aaaaaa", fontsize=11, fontfamily="DejaVu Sans")
+    ax.set_title("What drives her value", color="white", fontsize=13,
+                 fontfamily="DejaVu Sans", pad=6)
 
     # Legend hint
     from matplotlib.lines import Line2D
@@ -185,7 +221,7 @@ def _action_bar_chart(row: dict, cohort: pd.DataFrame) -> Image.Image:
         handles=[Line2D([0], [0], color=ACCENT_AVG, linewidth=1.5)],
         labels=["position avg"],
         loc="lower right",
-        fontsize=7,
+        fontsize=10,
         framealpha=0,
         labelcolor="#aaaaaa",
     )
@@ -283,11 +319,11 @@ def render_player_card(
         pct_label = f"top {100 - round(pct):.0f}% of" if rank > 1 else "#1 among"
         insight_text = (
             f"Ranks #{rank} of {n_cohort} {pos_label}s on g+/90 "
-            f"({ga_p90:.3f} vs. position avg {avg_ga:.3f}), "
+            f"({ga_p90:.2f} vs. position avg {avg_ga:.2f}), "
             f"placing her in the {pct_label} all {pos_label}s in the league. "
-            f"Her strongest action type is {top_label.lower()} ({top_val:+.3f} g+), "
-            f"while {bot_label.lower()} is her weakest ({bot_val:+.3f} g+). "
-            f"xG+xA/90 of {xga_p90:.3f} compares to a position average of {avg_xga:.3f}."
+            f"Her strongest action type is {top_label.lower()} ({top_val:+.2f} g+), "
+            f"while {bot_label.lower()} is her weakest ({bot_val:+.2f} g+). "
+            f"xG+xA/90 of {xga_p90:.2f} compares to a position average of {avg_xga:.2f}."
         )
 
     # Strip em/en dashes from all text drawn on the card (public-facing)
@@ -302,9 +338,11 @@ def render_player_card(
     FOOTER_H   = 80       # 1270–1350
     STAT_H     = 52       # stat strip height
     STAT_Y     = FOOTER_Y - STAT_H   # 1218
+    VERDICT_H  = 62       # bold verdict line zone
+    VERDICT_Y  = STAT_Y - VERDICT_H  # 1156
     TAKE_Y     = 760
     TAKE_W     = CARD_W - 108        # text column width (54px margin each side)
-    TAKE_MAX_H = STAT_Y - TAKE_Y - 20   # max pixel height for scout text (458px)
+    TAKE_MAX_H = VERDICT_Y - TAKE_Y - 20   # scout text zone (376px)
 
     # Auto-fit scout take: start at font size 32, shrink until text fits the zone
     def _fit_take(text: str, max_w_px: int, max_h_px: int) -> tuple[ImageFont.FreeTypeFont, str]:
@@ -326,15 +364,18 @@ def render_player_card(
         chars_per_line = max(20, int(max_w_px / avg_char_w))
         return font, textwrap.fill(text, width=chars_per_line)
 
-    take_font, take_wrapped = _fit_take(insight_text, TAKE_W, TAKE_MAX_H)
+    insight_trimmed = _trim_sentences(insight_text, max_sentences=3)
+    take_font, take_wrapped = _fit_take(insight_trimmed, TAKE_W, TAKE_MAX_H)
 
     # Stat strip text
-    avg_wga = float(cohort["weighted_ga_p90"].mean())
-    avg_xga = float(cohort["xga_p90"].mean())
+    avg_wga  = float(cohort["weighted_ga_p90"].mean())
+    avg_xga  = float(cohort["xga_p90"].mean())
+    mins_int = int(row.get("minutes_played", 0))
+    matches  = round(mins_int / 90)
     stat_text = (
-        f"Minutes: {int(row.get('minutes_played', 0)):,}"
-        f"   Wtd g+/90: {float(row.get('weighted_ga_p90', 0)):.3f} (pos avg {avg_wga:.3f})"
-        f"   xG+xA/90: {float(row.get('xga_p90', 0)):.3f} (pos avg {avg_xga:.3f})"
+        f"Minutes: {mins_int:,} (~{matches} full matches)"
+        f"   Wtd g+/90: {float(row.get('weighted_ga_p90', 0)):.2f} (pos avg {avg_wga:.2f})"
+        f"   xG+xA/90: {float(row.get('xga_p90', 0)):.2f} (pos avg {avg_xga:.2f})"
     )
 
     # Canvas
@@ -372,12 +413,23 @@ def render_player_card(
     chart_img = chart_img.resize((CARD_W - 80, 300), Image.LANCZOS)
     img.paste(chart_img, (40, 448))
 
-    # --- Zone 5: Scout take (760-STAT_Y) — full insight, auto-fit font ---
-    draw.rectangle([(0, TAKE_Y), (CARD_W, STAT_Y)], fill=(16, 36, 52, 255))
+    # --- Zone 5: Scout take (760-VERDICT_Y) ---
+    draw.rectangle([(0, TAKE_Y), (CARD_W, VERDICT_Y)], fill=(16, 36, 52, 255))
     draw.text((54, TAKE_Y + 20), take_wrapped, font=take_font,
               fill=TEXT_PRIMARY, spacing=8)
 
-    # --- Zone 5b: Stat strip (STAT_Y-FOOTER_Y) ---
+    # --- Zone 5b: Verdict line (VERDICT_Y-STAT_Y) ---
+    draw.rectangle([(0, VERDICT_Y), (CARD_W, STAT_Y)], fill=(20, 45, 65, 255))
+    draw.line([(0, VERDICT_Y), (CARD_W, VERDICT_Y)], fill=(50, 90, 130, 255), width=1)
+    verdict_text = _clean(_verdict(row, cohort, pos_label))
+    verdict_font = _get_bold_font(30)
+    vbb = draw.textbbox((0, 0), verdict_text, font=verdict_font)
+    v_x = (CARD_W - (vbb[2] - vbb[0])) // 2
+    v_y = VERDICT_Y + (VERDICT_H - (vbb[3] - vbb[1])) // 2
+    draw.text((v_x, v_y), verdict_text, font=verdict_font,
+              fill=(255, 230, 130, 255))
+
+    # --- Zone 5c: Stat strip (STAT_Y-FOOTER_Y) ---
     draw.rectangle([(0, STAT_Y), (CARD_W, FOOTER_Y)], fill=(25, 55, 80, 255))
     # Separator line at top of stat strip
     draw.line([(0, STAT_Y), (CARD_W, STAT_Y)], fill=(60, 100, 140, 255), width=1)
@@ -386,9 +438,9 @@ def render_player_card(
     # If text is wider than card, shorten it
     if bb[2] - bb[0] > CARD_W - 108:
         stat_text = (
-            f"Min: {int(row.get('minutes_played', 0)):,}"
-            f"   Wtd g+/90: {float(row.get('weighted_ga_p90', 0)):.3f} (avg {avg_wga:.3f})"
-            f"   xG+xA/90: {float(row.get('xga_p90', 0)):.3f} (avg {avg_xga:.3f})"
+            f"Min: {mins_int:,} (~{matches} matches)"
+            f"   Wtd g+/90: {float(row.get('weighted_ga_p90', 0)):.2f} (avg {avg_wga:.2f})"
+            f"   xG+xA/90: {float(row.get('xga_p90', 0)):.2f} (avg {avg_xga:.2f})"
         )
         bb = draw.textbbox((0, 0), stat_text, font=stat_font)
     stat_x = max(54, (CARD_W - (bb[2] - bb[0])) // 2)

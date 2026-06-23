@@ -141,7 +141,7 @@ def query_players(
     actual_limit = min(int(limit), MAX_ROWS)
     cols = ["_rank"] + LEAN_COLS
     available_cols = [c for c in cols if c in df.columns]
-    return df[available_cols].head(actual_limit).round(3).to_dict(orient="records")
+    return df[available_cols].head(actual_limit).round(2).to_dict(orient="records")
 
 
 def get_player_detail(
@@ -189,13 +189,13 @@ def get_player_detail(
     rank_match = cohort[cohort["player_name"].str.lower() == player_name.lower()]
     rank = int(rank_match.iloc[0]["_rank"]) if not rank_match.empty else None
 
-    result = {k: round(v, 3) if isinstance(v, float) else v for k, v in row.to_dict().items()}
+    result = {k: round(v, 2) if isinstance(v, float) else v for k, v in row.to_dict().items()}
     result["_rank"] = rank
     result["_cohort_size"] = len(cohort)
-    result["_position_avg_ga_p90"] = round(float(cohort["goals_added_p90"].mean()), 3)
-    result["_position_avg_xga_p90"] = round(float(cohort["xga_p90"].mean()), 3)
-    result["_position_avg_xgoals_p90"] = round(float(cohort["xgoals_p90"].mean()), 3)
-    result["_position_avg_xassists_p90"] = round(float(cohort["xassists_p90"].mean()), 3)
+    result["_position_avg_ga_p90"] = round(float(cohort["goals_added_p90"].mean()), 2)
+    result["_position_avg_xga_p90"] = round(float(cohort["xga_p90"].mean()), 2)
+    result["_position_avg_xgoals_p90"] = round(float(cohort["xgoals_p90"].mean()), 2)
+    result["_position_avg_xassists_p90"] = round(float(cohort["xassists_p90"].mean()), 2)
 
     return result
 

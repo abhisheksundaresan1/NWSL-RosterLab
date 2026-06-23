@@ -141,10 +141,10 @@ def _fallback_insight(row: pd.Series, cohort: pd.DataFrame) -> str:
     top_col = max(action_vals, key=action_vals.get)
     return (
         f"Ranks #{int(row['_rank'])} of {len(cohort)} {row['position']}s on g+/90 "
-        f"({row['goals_added_p90']:.3f} vs. position avg "
-        f"{round(cohort['goals_added_p90'].mean(), 3):.3f}), "
+        f"({row['goals_added_p90']:.2f} vs. position avg "
+        f"{round(cohort['goals_added_p90'].mean(), 2):.2f}), "
         f"with her strongest contribution from {action_labels[top_col]} "
-        f"({action_vals[top_col]:+.3f} g+)."
+        f"({action_vals[top_col]:+.2f} g+)."
     )
 
 
@@ -356,8 +356,8 @@ with the weights or want to compare across positions.
             card_label = (
                 f"#{int(row['_rank'])}  {row['player_name']}  ·  {row['team_abbreviation']}  "
                 f"·  Value: {row['value_score']:.2f}  "
-                f"·  Wtd g+/90: {row['weighted_ga_p90']:.3f}  "
-                f"·  xG+xA/90: {row['xga_p90']:.3f}  "
+                f"·  Wtd g+/90: {row['weighted_ga_p90']:.2f}  "
+                f"·  xG+xA/90: {row['xga_p90']:.2f}  "
                 f"·  {int(row['minutes_played']):,} min"
             )
 
@@ -391,12 +391,12 @@ with the weights or want to compare across positions.
                 with left:
                     st.markdown("**Core metrics**")
                     metrics = {
-                        "Weighted g+ / 90":   f"{row['weighted_ga_p90']:.3f}",
-                        "Raw g+ / 90":        f"{row['goals_added_p90']:.3f}",
+                        "Weighted g+ / 90":   f"{row['weighted_ga_p90']:.2f}",
+                        "Raw g+ / 90":        f"{row['goals_added_p90']:.2f}",
                         "Goals Added Total":  f"{row['goals_added_total']:.2f}",
-                        "xG / 90":            f"{row['xgoals_p90']:.3f}",
-                        "xAssists / 90":      f"{row['xassists_p90']:.3f}",
-                        "xG + xA / 90":       f"{row['xga_p90']:.3f}",
+                        "xG / 90":            f"{row['xgoals_p90']:.2f}",
+                        "xAssists / 90":      f"{row['xassists_p90']:.2f}",
+                        "xG + xA / 90":       f"{row['xga_p90']:.2f}",
                         "Minutes Played":     f"{int(row['minutes_played']):,}",
                         "Team":               row['team_name'],
                     }
@@ -807,8 +807,8 @@ with tab_validation:
         f"N = {v.get('team_n_observations', '—')} team-seasons."
     )
     tc1, tc2 = st.columns(2)
-    tc1.metric("Spearman ρ",  _fmt(v.get("team_spearman_rho"), 3))
-    tc2.metric("p-value",     _fmt(v.get("team_spearman_p"), 3))
+    tc1.metric("Spearman ρ",  _fmt(v.get("team_spearman_rho"), 2))
+    tc2.metric("p-value",     _fmt(v.get("team_spearman_p"), 2))
 
     # -----------------------------------------------------------------------
     # Row 5: Per-season breakdown
@@ -850,7 +850,7 @@ with tab_validation:
             lambda x: int(x) if pd.notna(x) else "—"
         )
         display_bxi["Value score"] = display_bxi["value_score"].apply(
-            lambda x: f"{x:.3f}" if pd.notna(x) else "—"
+            lambda x: f"{x:.2f}" if pd.notna(x) else "—"
         )
         display_bxi["Status"] = display_bxi.apply(
             lambda r: "✓ matched" if r["matched"] else ("⚠ below minutes" if r["below_minutes"] else "✗ not found"),

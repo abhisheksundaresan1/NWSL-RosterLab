@@ -43,6 +43,12 @@ def conference_tier(conf: str) -> int:
 # ---------------------------------------------------------------------------
 
 def load_ncaa() -> pd.DataFrame:
+    if not NCAA_CACHE_PATH.exists():
+        raise FileNotFoundError(
+            f"NCAA cache not found at {NCAA_CACHE_PATH}. "
+            "Run `python -m src.data.ncaa` locally to scrape and cache the data, "
+            "then commit data/raw/ncaa_players.parquet."
+        )
     return pd.read_parquet(NCAA_CACHE_PATH)
 
 

@@ -64,14 +64,14 @@ def one_line_insight(player_row: dict, cohort: pd.DataFrame) -> str | None:
     xgoals_p90      = player_row["xgoals_p90"]
     xassists_p90    = player_row["xassists_p90"]
 
-    avg_ga_p90          = round(cohort["goals_added_p90"].mean(), 3)
+    avg_ga_p90          = round(cohort["goals_added_p90"].mean(), 2)
     avg_weighted_ga_p90 = (
-        round(float(cohort["weighted_ga_p90"].mean()), 3)
+        round(float(cohort["weighted_ga_p90"].mean()), 2)
         if "weighted_ga_p90" in cohort.columns else None
     )
-    avg_xga_p90         = round(cohort["xga_p90"].mean(), 3)
-    avg_xgoals_p90      = round(cohort["xgoals_p90"].mean(), 3)
-    avg_xassists_p90    = round(cohort["xassists_p90"].mean(), 3)
+    avg_xga_p90         = round(cohort["xga_p90"].mean(), 2)
+    avg_xgoals_p90      = round(cohort["xgoals_p90"].mean(), 2)
+    avg_xassists_p90    = round(cohort["xassists_p90"].mean(), 2)
 
     action_vals    = {col: float(player_row.get(col, 0.0)) for col in _ACTION_LABELS}
     sorted_actions = sorted(action_vals.items(), key=lambda x: x[1], reverse=True)
@@ -82,8 +82,8 @@ def one_line_insight(player_row: dict, cohort: pd.DataFrame) -> str | None:
     weighted_line = ""
     if avg_weighted_ga_p90 is not None:
         weighted_line = (
-            f"- Position-weighted g+/90: {weighted_ga_p90:.3f}  "
-            f"(position avg: {avg_weighted_ga_p90:.3f})  "
+            f"- Position-weighted g+/90: {weighted_ga_p90:.2f}  "
+            f"(position avg: {avg_weighted_ga_p90:.2f})  "
             f"<-- drives her #{rank} ranking\n"
         )
 
@@ -91,14 +91,14 @@ def one_line_insight(player_row: dict, cohort: pd.DataFrame) -> str | None:
         f"Player: {name} ({pos}, {team}) -- {minutes:,} minutes played\n\n"
         f"Her stats vs. position peers ({n} {pos}s qualified):\n"
         f"{weighted_line}"
-        f"- Raw g+/90 (unweighted): {ga_p90:.3f}  (position avg: {avg_ga_p90:.3f})\n"
-        f"- xG+xA/90: {xga_p90:.3f}  (position avg: {avg_xga_p90:.3f})\n"
-        f"- xG/90: {xgoals_p90:.3f}  (position avg: {avg_xgoals_p90:.3f})\n"
-        f"- xA/90: {xassists_p90:.3f}  (position avg: {avg_xassists_p90:.3f})\n"
+        f"- Raw g+/90 (unweighted): {ga_p90:.2f}  (position avg: {avg_ga_p90:.2f})\n"
+        f"- xG+xA/90: {xga_p90:.2f}  (position avg: {avg_xga_p90:.2f})\n"
+        f"- xG/90: {xgoals_p90:.2f}  (position avg: {avg_xgoals_p90:.2f})\n"
+        f"- xA/90: {xassists_p90:.2f}  (position avg: {avg_xassists_p90:.2f})\n"
         f"- Rank: #{rank} of {n} {pos}s (by position-weighted value score)\n"
-        f"- Top actions (g+): {_ACTION_LABELS[top1_col]} ({top1_val:+.3f}), "
-        f"{_ACTION_LABELS[top2_col]} ({top2_val:+.3f})\n"
-        f"- Weakest action (g+): {_ACTION_LABELS[bot1_col]} ({bot1_val:+.3f})\n\n"
+        f"- Top actions (g+): {_ACTION_LABELS[top1_col]} ({top1_val:+.2f}), "
+        f"{_ACTION_LABELS[top2_col]} ({top2_val:+.2f})\n"
+        f"- Weakest action (g+): {_ACTION_LABELS[bot1_col]} ({bot1_val:+.2f})\n\n"
         f"Example output:\n{_FEW_SHOT}\n\n"
         f"In 2-3 sentences: (1) the main driver of her position-weighted value -- "
         f"which action types are amplified by her {pos} weights and carry her ranking; "
