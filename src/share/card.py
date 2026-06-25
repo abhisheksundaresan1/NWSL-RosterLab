@@ -567,52 +567,96 @@ def _name_short(name: str, max_len: int = 14) -> str:
 
 
 def _leaderboard_pitch(rows: list[dict], pitch_h_px: int = 940) -> "Image.Image":
-    """Render mplsoccer VerticalPitch with player markers. Returns PIL Image."""
-    from mplsoccer import VerticalPitch
+    """
+    Pure-PIL pitch rendering — no matplotlib, no threading issues in Streamlit.
 
-    bg_rgb = tuple(c / 255 for c in BG_COLOR[:3])
-    # figsize: width ∝ card aspect, height ∝ pitch zone
-    fig_w = 9.5
-    fig_h = fig_w * (pitch_h_px / CARD_W)
+    Coordinate space: x 0–80 (width), y 0–120 (length, attack at top/low y).
+    Maps to pixel space: px = x/80 * W, py = y/120 * H (y=0 → top of image).
+    """
+    import math
 
-    pitch = VerticalPitch(
-        pitch_type="statsbomb",
-        pitch_color=bg_rgb,
-        line_color="#3A5A7A",
-        linewidth=1.0,
-        spot_scale=0.004,
-    )
-    fig, ax = pitch.draw(figsize=(fig_w, fig_h))
-    fig.patch.set_facecolor(bg_rgb)
+    W, H = CARD_W, pitch_h_px
+    img  = Image.new("RGBA", (W, H), BG_COLOR)
+    draw = ImageDraw.Draw(img)
 
-    font_path = fm.findfont(fm.FontProperties(family="DejaVu Sans"))
-    font_bold = fm.FontProperties(fname=font_path, weight="bold")
-    font_reg  = fm.FontProperties(fname=font_path)
+    LINE  = (58, 90, 122, 200)   # muted blue-grey lines
+    PAD_X = int(W * 0.06)        # horizontal margin inside pitch markings
+    PAD_Y = int(H * 0.04)        # vertical margin
+
+    def _px(x_coord: float, y_coord: float) -> tuple[int, int]:
+        """Convert formation coords (x 0–80, y 0–120, y=0 = defence end) to pixels.
+        We flip y so attack (high y) appears at the TOP of the card."""
+        px = PAD_X + int((x_coord / 80) * (W - 2 * PAD_X))
+        # y=120 (attack) → PAD_Y (top); y=0 (defence) → H - PAD_Y (bottom)
+        py = PAD_Y + int(((120 - y_coord) / 120) * (H - 2 * PAD_Y))
+        return px, py
+
+    # --- Pitch outline + centre line ---
+    tl = _px(0, 120)
+    br = _px(80, 0)
+    draw.rectangle([tl, br], outline=LINE, width=2)
+
+    mid_l = _px(0,  60)
+    mid_r = _px(80, 60)
+    draw.line([mid_l, mid_r], fill=LINE, width=2)
+
+    # Centre circle (radius ≈ 9 in formation coords → scale to pixels)
+    cx, cy = _px(40, 60)
+    r_px = int(9 / 80 * (W - 2 * PAD_X))
+    draw.ellipse([cx - r_px, cy - r_px, cx + r_px, cy + r_px], outline=LINE, width=2)
+
+    # Penalty boxes (attack = top, defence = bottom)
+    # Top box: y from 102 to 120, x from 18 to 62
+    tbox_tl = _px(18, 120)
+    tbox_br = _px(62, 102)
+    draw.rectangle([tbox_tl, tbox_br], outline=LINE, width=2)
+
+    # Bottom box: y from 0 to 18, x from 18 to 62
+    bbox_tl = _px(18, 18)
+    bbox_br = _px(62, 0)
+    draw.rectangle([bbox_tl, bbox_br], outline=LINE, width=2)
+
+    # --- Player markers ---
+    marker_r = int(W * 0.028)   # radius ~30px
+    name_font  = _get_font(22)
+    score_font = _get_font(19)
 
     for row in rows:
         if row["player_name"] == "—":
             continue
-        x     = row["x"]
-        y     = row["y"]
-        color = TEAM_COLORS.get(row.get("team_abbreviation", ""), DEFAULT_TEAM_COLOR)
-        vs    = row["value_score"]
+
+        cx, cy = _px(row["x"], row["y"])
+        hex_color = TEAM_COLORS.get(row.get("team_abbreviation", ""), DEFAULT_TEAM_COLOR)
+        r, g, b = int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
+        fill   = (r, g, b, 255)
+        border = (255, 255, 255, 220)
+
+        # Filled circle with white border
+        draw.ellipse(
+            [cx - marker_r - 2, cy - marker_r - 2, cx + marker_r + 2, cy + marker_r + 2],
+            fill=border,
+        )
+        draw.ellipse(
+            [cx - marker_r, cy - marker_r, cx + marker_r, cy + marker_r],
+            fill=fill,
+        )
+
         name  = _name_short(_clean_text(row["player_name"]))
+        score = f"{row['value_score']:+.2f}"
 
-        pitch.scatter(x, y, s=900, color=color, edgecolors="white",
-                      linewidth=1.5, ax=ax, zorder=3)
-        ax.text(x, y - 5.5, name,
-                ha="center", va="top", fontsize=8.5, color="white",
-                fontproperties=font_bold, zorder=4)
-        ax.text(x, y + 4.5, f"{vs:+.2f}",
-                ha="center", va="bottom", fontsize=7.5, color="#FFB74D",
-                fontproperties=font_reg, zorder=4)
+        # Name below marker
+        nb = draw.textbbox((0, 0), name, font=name_font)
+        nw = nb[2] - nb[0]
+        draw.text((cx - nw // 2, cy + marker_r + 4), name,
+                  font=name_font, fill=(255, 255, 255, 230))
 
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", bbox_inches="tight",
-                facecolor=fig.get_facecolor(), dpi=120)
-    plt.close(fig)
-    buf.seek(0)
-    return Image.open(buf).copy()
+        # Score above marker (amber)
+        sb = draw.textbbox((0, 0), score, font=score_font)
+        sw = sb[2] - sb[0]
+        draw.text((cx - sw // 2, cy - marker_r - (sb[3] - sb[1]) - 4), score,
+                  font=score_font, fill=(255, 183, 77, 255))
+
+    return img
 
 
 def _draw_grouped_list(draw: ImageDraw.ImageDraw, rows: list[dict],

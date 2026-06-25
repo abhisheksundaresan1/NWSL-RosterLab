@@ -119,7 +119,7 @@ def get_insight(player_name: str, season: str, min_minutes: int, position: str) 
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
-def _cached_leaderboard_card(season: str, min_minutes: int, card_version: int = 1) -> bytes:
+def _cached_leaderboard_card(season: str, min_minutes: int, card_version: int = 2) -> bytes:
     """Cache Undervalued XI PNG. card_version busts cache after layout changes."""
     full = load_value_table(min_minutes, season)
     rows = select_undervalued_xi(full, season, min_minutes)
