@@ -20,6 +20,8 @@ import streamlit as st
 
 from src.analysis.ranking import build_player_value_table, rank_by_position, validate_value_table
 from src.analysis.college_ranking import build_college_value_table
+from src.analysis.drops import select_undervalued_xi, best_xi_excluded_names
+from src.share.card import render_player_card, render_leaderboard_card
 from src.explain.insight import one_line_insight
 from src.data.sources import (
     fetch_player_goals_added,
@@ -119,8 +121,6 @@ def get_insight(player_name: str, season: str, min_minutes: int, position: str) 
 @st.cache_data(show_spinner=False, ttl=3600)
 def _cached_leaderboard_card(season: str, min_minutes: int, card_version: int = 1) -> bytes:
     """Cache Undervalued XI PNG. card_version busts cache after layout changes."""
-    from src.share.card import render_leaderboard_card
-    from src.analysis.drops import select_undervalued_xi, best_xi_excluded_names
     full = load_value_table(min_minutes, season)
     rows = select_undervalued_xi(full, season, min_minutes)
     return render_leaderboard_card(
@@ -135,7 +135,6 @@ def _cached_leaderboard_card(season: str, min_minutes: int, card_version: int = 
 def _cached_player_card(player_name: str, season: str, min_minutes: int, position: str,
                         card_version: int = 5) -> bytes:
     """Cache rendered PNG bytes. card_version busts stale cached cards after layout changes."""
-    from src.share.card import render_player_card
     full   = load_value_table(min_minutes, season)
     cohort = rank_by_position(full, position).copy()
     cohort["_rank"] = range(1, len(cohort) + 1)
@@ -950,7 +949,6 @@ with tab_drops:
     )
 
     try:
-        from src.analysis.drops import best_xi_excluded_names
         _drops_bytes = _cached_leaderboard_card(season, min_minutes=500)
         st.image(_drops_bytes, use_container_width=True)
         st.download_button(
