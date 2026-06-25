@@ -35,13 +35,37 @@ FORMATION_SLOTS: list[dict] = [
     {"slot": "W_R",  "position": "W",  "line": "FWD"},
 ]
 
+# ---------------------------------------------------------------------------
+# Availability threshold — filters injury-shortened players
+# ---------------------------------------------------------------------------
+# Regular-season game counts per NWSL season (used to compute 75% threshold).
+# A player must have played ≥ 75% of possible minutes to appear in the
+# Undervalued XI. This prevents injury-shortened campaigns from surfacing
+# (e.g. a top player who missed half the season due to injury was not "snubbed").
+_SEASON_GAMES: dict[int, int] = {
+    2019: 24,
+    2021: 24,
+    2022: 22,
+    2023: 22,
+    2024: 26,
+    2025: 26,
+}
+_DEFAULT_GAMES = 26
+
+
+def undervalued_min_minutes(season: int | str) -> int:
+    """Return the 75%-of-possible-minutes threshold for a given NWSL season."""
+    games = _SEASON_GAMES.get(int(season), _DEFAULT_GAMES)
+    return int(games * 90 * 0.75)
+
+
 # VerticalPitch (mplsoccer statsbomb) coordinates: x=width (0-80), y=length (0-120)
 # Attack at top (high y). These map each slot to its pitch position.
 SLOT_COORDS: dict[str, tuple[float, float]] = {
-    "FB_L": (10, 22),
-    "CB_L": (28, 22),
-    "CB_R": (52, 22),
-    "FB_R": (70, 22),
+    "FB_L": ( 7, 22),
+    "CB_L": (27, 22),
+    "CB_R": (53, 22),
+    "FB_R": (73, 22),
     "DM":   (40, 45),
     "CM":   (26, 62),
     "AM":   (54, 62),
@@ -118,7 +142,10 @@ def select_undervalued_xi(
     }
 
     # --- Apply minutes floor to value_table --------------------------------
-    vt = value_table[value_table["minutes_played"] >= min_minutes].copy()
+    # Use the higher of the caller's floor and the full-season threshold so
+    # injury-shortened players (who weren't "snubbed") are excluded.
+    effective_min = max(min_minutes, undervalued_min_minutes(season_int))
+    vt = value_table[value_table["minutes_played"] >= effective_min].copy()
 
     # Pre-normalize player names for fast lookup
     vt["_norm_name"] = vt["player_name"].apply(normalize_name)

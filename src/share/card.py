@@ -618,8 +618,8 @@ def _leaderboard_pitch(rows: list[dict], pitch_h_px: int = 940) -> "Image.Image"
 
     # --- Player markers ---
     marker_r = int(W * 0.028)   # radius ~30px
-    name_font  = _get_font(22)
-    score_font = _get_font(19)
+    name_font  = _get_font(24)
+    score_font = _get_font(20)
 
     for row in rows:
         if row["player_name"] == "—":

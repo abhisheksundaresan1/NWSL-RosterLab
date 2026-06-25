@@ -20,7 +20,7 @@ import streamlit as st
 
 from src.analysis.ranking import build_player_value_table, rank_by_position, validate_value_table
 from src.analysis.college_ranking import build_college_value_table
-from src.analysis.drops import select_undervalued_xi, best_xi_excluded_names
+from src.analysis.drops import select_undervalued_xi, best_xi_excluded_names, undervalued_min_minutes
 from src.share.card import render_player_card, render_leaderboard_card
 from src.explain.insight import one_line_insight
 from src.data.sources import (
@@ -118,17 +118,6 @@ def get_insight(player_name: str, season: str, min_minutes: int, position: str) 
         return None
 
 
-@st.cache_data(show_spinner=False, ttl=3600)
-def _cached_leaderboard_card(season: str, min_minutes: int, card_version: int = 2) -> bytes:
-    """Cache Undervalued XI PNG. card_version busts cache after layout changes."""
-    full = load_value_table(min_minutes, season)
-    rows = select_undervalued_xi(full, season, min_minutes)
-    return render_leaderboard_card(
-        rows,
-        title="Undervalued XI",
-        season=season,
-        subtitle="Top-value outfield players outside the Best XI  ·  Outfield only",
-    )
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
@@ -941,15 +930,39 @@ strength-of-schedule are not accounted for.
 # Tab 5: Drops — Undervalued XI
 # ---------------------------------------------------------------------------
 with tab_drops:
+    _uv_min = undervalued_min_minutes(season)
     st.subheader(f"Undervalued XI — {season}")
     st.caption(
-        "The highest-value outfield players who were NOT named to that season's "
-        "NWSL Best XI (First or Second XI). Ranked by position-weighted g+/90. "
+        f"Highest-value outfield players NOT named to the {season} NWSL Best XI (First or Second XI). "
+        f"Minimum **{_uv_min:,} minutes** (~75% of possible playing time) — injury-shortened seasons excluded. "
         "GK excluded — our model covers outfield positions only."
     )
 
-    try:
-        _drops_bytes = _cached_leaderboard_card(season, min_minutes=500)
+    # Cache key includes season + min_minutes + layout version so stale PNGs are busted.
+    _drops_key = f"drops_png_{season}_{min_minutes}_v4"
+    _rows_key  = f"drops_rows_{season}_{min_minutes}_v4"
+
+    if _drops_key not in st.session_state:
+        try:
+            with st.spinner("Generating Undervalued XI..."):
+                _rows = select_undervalued_xi(full_table, season, min_minutes)
+                _png  = render_leaderboard_card(
+                    _rows,
+                    title="Undervalued XI",
+                    season=season,
+                    subtitle="Top-value outfield players outside the Best XI  ·  Outfield only",
+                )
+            st.session_state[_drops_key] = _png
+            st.session_state[_rows_key]  = _rows
+        except ValueError as e:
+            st.warning(str(e))
+        except Exception as e:
+            st.error(f"Could not render Undervalued XI: {e}")
+
+    if _drops_key in st.session_state:
+        _drops_bytes = st.session_state[_drops_key]
+        _drop_rows   = st.session_state.get(_rows_key, [])
+
         st.image(_drops_bytes, use_container_width=True)
         st.download_button(
             label="⬇ Download Undervalued XI (PNG)",
@@ -958,6 +971,20 @@ with tab_drops:
             mime="image/png",
             key="dl_undervalued_xi",
         )
+
+        _filled = [r for r in _drop_rows if r["player_name"] != "—"]
+        if _filled:
+            _drop_df = pd.DataFrame([{
+                "Position": r["position"],
+                "Player":   r["player_name"],
+                "Team":     r["team_name"],
+                "Value score": f"{r['value_score']:+.2f}",
+                "Minutes":  f"{r['minutes_played']:,}",
+                "Rank in pos": f"#{r['rank_in_position']} of {r['cohort_size']}",
+            } for r in _filled])
+            with st.expander("Selected XI — full stats", expanded=False):
+                st.dataframe(_drop_df, hide_index=True, use_container_width=True)
+
         with st.expander(f"Who was excluded (Best XI + Second XI {season})", expanded=False):
             first_names, second_names = best_xi_excluded_names(season)
             col_a, col_b = st.columns(2)
@@ -969,10 +996,6 @@ with tab_drops:
                 st.markdown("**Second XI**")
                 for n in second_names:
                     st.caption(n)
-    except ValueError as e:
-        st.warning(str(e))
-    except Exception as e:
-        st.error(f"Could not render Undervalued XI: {e}")
 
 
 # ---------------------------------------------------------------------------
