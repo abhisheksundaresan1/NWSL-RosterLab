@@ -429,7 +429,9 @@ with tab_draft:
     )
 
     try:
-        college_tables = load_college_tables()
+        if "college_tables" not in st.session_state:
+            st.session_state["college_tables"] = load_college_tables()
+        college_tables = st.session_state["college_tables"]
         draft_board = college_tables["draft_board"]
         draftable_summary = college_tables["draftable_summary"]
         trends = college_tables["trends"]
@@ -747,8 +749,10 @@ with tab_validation:
             save_validation_cache(v)
         st.rerun()
 
-    with st.spinner("Loading validation results…"):
-        v = _load_validation()
+    if "validation_result" not in st.session_state:
+        with st.spinner("Loading validation results…"):
+            st.session_state["validation_result"] = _load_validation()
+    v = st.session_state["validation_result"]
 
     bxi_df = v.get("best_xi_ranked", pd.DataFrame())
 
