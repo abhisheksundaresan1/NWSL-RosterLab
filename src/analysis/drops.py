@@ -1,0 +1,197 @@
+"""
+src/analysis/drops.py — Undervalued XI selection logic.
+
+Pure function: DataFrame in → list[dict] out. No UI, no API calls.
+
+select_undervalued_xi() picks the highest-value eligible outfield player
+for each of 10 formation slots (4-3-3) whose season Best XI (both First
+and Second XI) has NOT been selected. GK is deliberately excluded — our
+model covers only outfield positions.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pandas as pd
+
+from src.data.ground_truth import fetch_best_xi, load_name_aliases, normalize_name
+from src.analysis.ranking import rank_by_position
+
+# ---------------------------------------------------------------------------
+# Formation definition  (4-3-3, 10 outfield slots, no GK)
+# ---------------------------------------------------------------------------
+
+FORMATION_SLOTS: list[dict] = [
+    {"slot": "FB_L", "position": "FB", "line": "DEF"},
+    {"slot": "CB_L", "position": "CB", "line": "DEF"},
+    {"slot": "CB_R", "position": "CB", "line": "DEF"},
+    {"slot": "FB_R", "position": "FB", "line": "DEF"},
+    {"slot": "DM",   "position": "DM", "line": "MID"},
+    {"slot": "CM",   "position": "CM", "line": "MID"},
+    {"slot": "AM",   "position": "AM", "line": "MID"},
+    {"slot": "W_L",  "position": "W",  "line": "FWD"},
+    {"slot": "ST",   "position": "ST", "line": "FWD"},
+    {"slot": "W_R",  "position": "W",  "line": "FWD"},
+]
+
+# VerticalPitch (mplsoccer statsbomb) coordinates: x=width (0-80), y=length (0-120)
+# Attack at top (high y). These map each slot to its pitch position.
+SLOT_COORDS: dict[str, tuple[float, float]] = {
+    "FB_L": (10, 22),
+    "CB_L": (28, 22),
+    "CB_R": (52, 22),
+    "FB_R": (70, 22),
+    "DM":   (40, 45),
+    "CM":   (26, 62),
+    "AM":   (54, 62),
+    "W_L":  (10, 88),
+    "ST":   (40, 100),
+    "W_R":  (70, 88),
+}
+
+
+def _seasons_with_both_tiers(best_xi_df: pd.DataFrame) -> list[int]:
+    """Return seasons that have both 'first' and 'second' team_selection rows."""
+    counts = best_xi_df.groupby("season")["team_selection"].nunique()
+    return sorted(counts[counts == 2].index.tolist(), reverse=True)
+
+
+def select_undervalued_xi(
+    value_table: pd.DataFrame,
+    season: str | int,
+    min_minutes: int = 500,
+) -> list[dict]:
+    """
+    Return 10 dicts (one per formation slot) for the highest-value outfield
+    players in `value_table` who were NOT named in the season's Best XI
+    (both First XI and Second XI are excluded — 22 players total per season).
+
+    GK excluded — our model has no POSITION_WEIGHTS for goalkeepers.
+    The card should be labelled "Outfield XI".
+
+    Parameters
+    ----------
+    value_table : DataFrame from build_player_value_table(), already filtered
+                  to min_minutes (or unfiltered — we apply the floor here).
+    season      : season year as int or str (e.g. 2025 or "2025").
+    min_minutes : minimum minutes played floor (default 500).
+
+    Returns
+    -------
+    list[dict] with keys:
+        slot, position, line, x, y,
+        player_name, team_name, team_abbreviation,
+        value_score, minutes_played, rank_in_position, cohort_size
+
+    Raises
+    ------
+    ValueError if the season lacks both First + Second XI data.
+    """
+    season_int = int(season)
+
+    # --- Load Best XI + assert both tiers present --------------------------
+    best_xi_all = fetch_best_xi()
+    season_bxi = best_xi_all[best_xi_all["season"] == season_int]
+
+    tiers_present = set(season_bxi["team_selection"].unique())
+    missing = {"first", "second"} - tiers_present
+    if missing:
+        available = _seasons_with_both_tiers(best_xi_all)
+        raise ValueError(
+            f"Season {season_int} is missing Best XI tier(s): {missing}. "
+            f"Seasons with both tiers: {available}. "
+            "Re-run fetch_best_xi(refresh=True) to pull latest Wikipedia data."
+        )
+
+    # --- Build exclusion set (alias → normalize) ----------------------------
+    alias_map = load_name_aliases()   # {normalized_canonical: normalized_asa}
+
+    def _resolve(name: str) -> str:
+        """alias-aware normalization: canonical_name → asa_name → normalized."""
+        norm = normalize_name(name)
+        return alias_map.get(norm, norm)
+
+    exclusion_set: set[str] = {
+        _resolve(n)
+        for n in season_bxi["player_name"]
+    }
+
+    # --- Apply minutes floor to value_table --------------------------------
+    vt = value_table[value_table["minutes_played"] >= min_minutes].copy()
+
+    # Pre-normalize player names for fast lookup
+    vt["_norm_name"] = vt["player_name"].apply(normalize_name)
+
+    # --- Fill each slot ----------------------------------------------------
+    picked_names: set[str] = set()       # normalized names already used
+    result: list[dict] = []
+
+    for slot_def in FORMATION_SLOTS:
+        slot     = slot_def["slot"]
+        position = slot_def["position"]
+        line     = slot_def["line"]
+        x, y     = SLOT_COORDS[slot]
+
+        try:
+            ranked = rank_by_position(vt, position)
+        except ValueError:
+            # No players at this position above the minutes floor
+            result.append(_empty_slot(slot, position, line, x, y))
+            continue
+
+        picked = None
+        for _, row in ranked.iterrows():
+            norm = normalize_name(row["player_name"])
+            if norm in exclusion_set or norm in picked_names:
+                continue
+            picked = row
+            picked_names.add(norm)
+            break
+
+        if picked is None:
+            result.append(_empty_slot(slot, position, line, x, y))
+            continue
+
+        # rank_in_position = 1-based index in the full position cohort
+        full_cohort = rank_by_position(vt, position)
+        rank_series = full_cohort.reset_index(drop=True)
+        rank_idx = rank_series[rank_series["player_name"] == picked["player_name"]].index
+        rank_in_pos = int(rank_idx[0]) + 1 if len(rank_idx) else None
+
+        result.append({
+            "slot":             slot,
+            "position":         position,
+            "line":             line,
+            "x":                x,
+            "y":                y,
+            "player_name":      picked["player_name"],
+            "team_name":        picked.get("team_name", ""),
+            "team_abbreviation": picked.get("team_abbreviation", ""),
+            "value_score":      float(picked["value_score"]),
+            "minutes_played":   int(picked["minutes_played"]),
+            "rank_in_position": rank_in_pos,
+            "cohort_size":      len(full_cohort),
+        })
+
+    return result
+
+
+def _empty_slot(slot: str, position: str, line: str, x: float, y: float) -> dict:
+    return {
+        "slot": slot, "position": position, "line": line,
+        "x": x, "y": y,
+        "player_name": "—", "team_name": "", "team_abbreviation": "",
+        "value_score": 0.0, "minutes_played": 0,
+        "rank_in_position": None, "cohort_size": 0,
+    }
+
+
+def best_xi_excluded_names(season: str | int) -> tuple[list[str], list[str]]:
+    """Return (first_xi_names, second_xi_names) for the season, for UI display."""
+    season_int = int(season)
+    bxi = fetch_best_xi()
+    s = bxi[bxi["season"] == season_int]
+    first  = sorted(s[s["team_selection"] == "first"]["player_name"].tolist())
+    second = sorted(s[s["team_selection"] == "second"]["player_name"].tolist())
+    return first, second

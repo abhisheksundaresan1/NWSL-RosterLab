@@ -150,6 +150,13 @@ def headline_hook(row: dict, cohort: pd.DataFrame, season: str) -> str:
 # Private: text helpers
 # ---------------------------------------------------------------------------
 
+def _clean_text(text: str) -> str:
+    """Replace em/en dashes with comma-space; fix space-before-comma; collapse double spaces."""
+    result = str(text).replace("—", ", ").replace("–", ", ")
+    result = re.sub(r'\s+,', ',', result)
+    return re.sub(r'  +', ' ', result)
+
+
 def _trim_sentences(text: str, max_sentences: int = 3) -> str:
     """Keep first max_sentences sentences. Normalizes whitespace before splitting."""
     normalized = re.sub(r'\s+', ' ', text.strip())
@@ -327,14 +334,8 @@ def render_player_card(
             f"xG+xA/90 of {xga_p90:.2f} compares to a position average of {avg_xga:.2f}."
         )
 
-    # Replace em/en dashes with comma-space; fix any space-before-comma and double spaces
-    def _clean(text: str) -> str:
-        result = text.replace("—", ", ").replace("–", ", ")
-        result = re.sub(r'\s+,', ',', result)   # "word , " -> "word,"
-        return re.sub(r'  +', ' ', result)
-
-    hook         = _clean(hook)
-    insight_text = _clean(insight_text)
+    hook         = _clean_text(hook)
+    insight_text = _clean_text(insight_text)
 
     # Layout constants
     FOOTER_Y   = 1270
@@ -424,7 +425,7 @@ def render_player_card(
     # --- Zone 5b: Verdict line (VERDICT_Y-STAT_Y) ---
     draw.rectangle([(0, VERDICT_Y), (CARD_W, STAT_Y)], fill=(20, 45, 65, 255))
     draw.line([(0, VERDICT_Y), (CARD_W, VERDICT_Y)], fill=(50, 90, 130, 255), width=1)
-    verdict_text = _clean(_verdict(row, cohort, pos_label))
+    verdict_text = _clean_text(_verdict(row, cohort, pos_label))
     verdict_font = _get_bold_font(30)
     vbb = draw.textbbox((0, 0), verdict_text, font=verdict_font)
     v_x = (CARD_W - (vbb[2] - vbb[0])) // 2
@@ -495,6 +496,143 @@ def render_og_image() -> bytes:
     return buf.getvalue()
 
 
-def render_leaderboard_card(rows: list[dict], title: str, season: str) -> bytes:
-    """Placeholder — reuses _draw_header, _draw_footer, _action_bar_chart. Fast follow."""
-    raise NotImplementedError("leaderboard card is a planned fast follow")
+def render_leaderboard_card(
+    rows: list[dict],
+    title: str,
+    season: str,
+    subtitle: str | None = None,
+) -> bytes:
+    """
+    Render a 1080×1350 PNG leaderboard card and return PNG bytes.
+
+    rows     — list[dict] from select_undervalued_xi(); each has slot, position,
+               x, y, player_name, team_abbreviation, value_score, line.
+    title    — large text in the header (e.g. "Undervalued XI").
+    season   — season label (e.g. "2025").
+    subtitle — smaller text below header (optional).
+
+    Generic: pass any row set + title to reuse for future "Risers", "Rookie Watch" etc.
+    $0 cost — no LLM calls.
+    """
+    # Neutral header color (multiple teams — no single team color)
+    HEADER_COLOR = "#1A3A5C"
+    HEADER_H     = 200
+    SUBTITLE_H   = 60
+    PITCH_Y      = HEADER_H + SUBTITLE_H      # 260
+    PITCH_H      = 940
+    FOOTER_Y     = CARD_H - 80               # 1270
+
+    img  = Image.new("RGBA", (CARD_W, CARD_H), BG_COLOR)
+    draw = ImageDraw.Draw(img)
+
+    # --- Header ---
+    hook_text = _clean_text(f"{title}  ·  {season}")
+    _draw_header(draw, img, HEADER_COLOR, hook_text, header_h=HEADER_H)
+
+    # --- Subtitle ---
+    if subtitle:
+        sub_font = _get_font(26)
+        sub_text = _clean_text(subtitle)
+        bb = draw.textbbox((0, 0), sub_text, font=sub_font)
+        sub_x = (CARD_W - (bb[2] - bb[0])) // 2
+        sub_y = HEADER_H + (SUBTITLE_H - (bb[3] - bb[1])) // 2
+        draw.text((sub_x, sub_y), sub_text, font=sub_font,
+                  fill=(160, 200, 230, 255))
+
+    # --- Pitch (mplsoccer) ---
+    try:
+        pitch_img = _leaderboard_pitch(rows, pitch_h_px=PITCH_H)
+        pitch_img = pitch_img.resize((CARD_W, PITCH_H), Image.LANCZOS)
+        img.paste(pitch_img, (0, PITCH_Y))
+    except Exception:
+        # Fallback: grouped text list
+        _draw_grouped_list(draw, rows, y_start=PITCH_Y, zone_h=PITCH_H)
+
+    # --- Footer ---
+    _draw_footer(draw, footer_y=FOOTER_Y)
+
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
+    return buf.getvalue()
+
+
+def _name_short(name: str, max_len: int = 14) -> str:
+    """Return 'First L.' if name exceeds max_len chars."""
+    if len(name) <= max_len:
+        return name
+    parts = name.split()
+    if len(parts) >= 2:
+        return f"{parts[0]} {parts[-1][0]}."
+    return name[:max_len]
+
+
+def _leaderboard_pitch(rows: list[dict], pitch_h_px: int = 940) -> "Image.Image":
+    """Render mplsoccer VerticalPitch with player markers. Returns PIL Image."""
+    from mplsoccer import VerticalPitch
+
+    bg_rgb = tuple(c / 255 for c in BG_COLOR[:3])
+    # figsize: width ∝ card aspect, height ∝ pitch zone
+    fig_w = 9.5
+    fig_h = fig_w * (pitch_h_px / CARD_W)
+
+    pitch = VerticalPitch(
+        pitch_type="statsbomb",
+        pitch_color=bg_rgb,
+        line_color="#3A5A7A",
+        linewidth=1.0,
+        spot_scale=0.004,
+    )
+    fig, ax = pitch.draw(figsize=(fig_w, fig_h))
+    fig.patch.set_facecolor(bg_rgb)
+
+    font_path = fm.findfont(fm.FontProperties(family="DejaVu Sans"))
+    font_bold = fm.FontProperties(fname=font_path, weight="bold")
+    font_reg  = fm.FontProperties(fname=font_path)
+
+    for row in rows:
+        if row["player_name"] == "—":
+            continue
+        x     = row["x"]
+        y     = row["y"]
+        color = TEAM_COLORS.get(row.get("team_abbreviation", ""), DEFAULT_TEAM_COLOR)
+        vs    = row["value_score"]
+        name  = _name_short(_clean_text(row["player_name"]))
+
+        pitch.scatter(x, y, s=900, color=color, edgecolors="white",
+                      linewidth=1.5, ax=ax, zorder=3)
+        ax.text(x, y - 5.5, name,
+                ha="center", va="top", fontsize=8.5, color="white",
+                fontproperties=font_bold, zorder=4)
+        ax.text(x, y + 4.5, f"{vs:+.2f}",
+                ha="center", va="bottom", fontsize=7.5, color="#FFB74D",
+                fontproperties=font_reg, zorder=4)
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", bbox_inches="tight",
+                facecolor=fig.get_facecolor(), dpi=120)
+    plt.close(fig)
+    buf.seek(0)
+    return Image.open(buf).copy()
+
+
+def _draw_grouped_list(draw: ImageDraw.ImageDraw, rows: list[dict],
+                       y_start: int, zone_h: int) -> None:
+    """Fallback: render DEF / MID / FWD text list if mplsoccer is unavailable."""
+    lines_by_group: dict[str, list[str]] = {"DEF": [], "MID": [], "FWD": []}
+    for r in rows:
+        if r["player_name"] == "—":
+            continue
+        label = f"{r['position']}  {r['player_name']}  {r['value_score']:+.2f}"
+        lines_by_group.get(r["line"], lines_by_group["FWD"]).append(label)
+
+    name_font  = _get_font(28)
+    group_font = _get_bold_font(30)
+    y = y_start + 30
+    for group, members in lines_by_group.items():
+        draw.text((54, y), group, font=group_font, fill=(100, 160, 210, 255))
+        y += 38
+        for line in members:
+            draw.text((80, y), _clean_text(line), font=name_font,
+                      fill=(220, 230, 240, 255))
+            y += 36
+        y += 16

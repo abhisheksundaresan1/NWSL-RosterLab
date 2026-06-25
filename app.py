@@ -117,6 +117,21 @@ def get_insight(player_name: str, season: str, min_minutes: int, position: str) 
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
+def _cached_leaderboard_card(season: str, min_minutes: int, card_version: int = 1) -> bytes:
+    """Cache Undervalued XI PNG. card_version busts cache after layout changes."""
+    from src.share.card import render_leaderboard_card
+    from src.analysis.drops import select_undervalued_xi, best_xi_excluded_names
+    full = load_value_table(min_minutes, season)
+    rows = select_undervalued_xi(full, season, min_minutes)
+    return render_leaderboard_card(
+        rows,
+        title="Undervalued XI",
+        season=season,
+        subtitle="Top-value outfield players outside the Best XI  ·  Outfield only",
+    )
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
 def _cached_player_card(player_name: str, season: str, min_minutes: int, position: str,
                         card_version: int = 5) -> bytes:
     """Cache rendered PNG bytes. card_version busts stale cached cards after layout changes."""
@@ -267,7 +282,9 @@ else:
 # Main area — tabbed layout
 # ---------------------------------------------------------------------------
 
-tab_rankings, tab_draft, tab_scout, tab_validation, tab_about = st.tabs(["Player Rankings", "Draft Board", "Scout Assistant", "Model Validation", "About"])
+tab_rankings, tab_draft, tab_scout, tab_validation, tab_drops, tab_about = st.tabs([
+    "Player Rankings", "Draft Board", "Scout Assistant", "Model Validation", "Drops", "About"
+])
 
 # ---------------------------------------------------------------------------
 # Tab 1: Player Rankings (all existing content, unchanged)
@@ -922,7 +939,46 @@ strength-of-schedule are not accounted for.
         """.format(n_unmatched=len(unmatched_list)))
 
 # ---------------------------------------------------------------------------
-# Tab 5: About
+# Tab 5: Drops — Undervalued XI
+# ---------------------------------------------------------------------------
+with tab_drops:
+    st.subheader(f"Undervalued XI — {season}")
+    st.caption(
+        "The highest-value outfield players who were NOT named to that season's "
+        "NWSL Best XI (First or Second XI). Ranked by position-weighted g+/90. "
+        "GK excluded — our model covers outfield positions only."
+    )
+
+    try:
+        from src.analysis.drops import best_xi_excluded_names
+        _drops_bytes = _cached_leaderboard_card(season, min_minutes=500)
+        st.image(_drops_bytes, use_container_width=True)
+        st.download_button(
+            label="⬇ Download Undervalued XI (PNG)",
+            data=_drops_bytes,
+            file_name=f"undervalued_xi_{season}.png",
+            mime="image/png",
+            key="dl_undervalued_xi",
+        )
+        with st.expander(f"Who was excluded (Best XI + Second XI {season})", expanded=False):
+            first_names, second_names = best_xi_excluded_names(season)
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.markdown("**First XI**")
+                for n in first_names:
+                    st.caption(n)
+            with col_b:
+                st.markdown("**Second XI**")
+                for n in second_names:
+                    st.caption(n)
+    except ValueError as e:
+        st.warning(str(e))
+    except Exception as e:
+        st.error(f"Could not render Undervalued XI: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Tab 6: About
 # ---------------------------------------------------------------------------
 with tab_about:
     st.markdown("## About NWSL RosterLab")
