@@ -210,7 +210,10 @@ def build_player_value_table(
     assert df["value_score"].isna().sum() == 0, "NaN in value_score after z-score"
 
     # Step 9: Select and order output columns.
+    # player_id is carried through so snapshots can be joined on a stable key
+    # (ASA name spellings and general_position can drift between pulls).
     out_cols = [
+        "player_id",
         "player_name", "team_name", "team_abbreviation", "position", "age", "minutes_played",
         "value_score", "weighted_ga_p90", "goals_added_total", "goals_added_p90",
         "xgoals_p90", "xassists_p90", "xga_p90",
@@ -236,6 +239,47 @@ def build_player_value_table(
     print(df.groupby("position").size().to_string())
 
     return df
+
+
+def apply_stabilization(vt: pd.DataFrame, K: int = 300) -> pd.DataFrame:
+    """Shrink weighted_ga_p90 toward the position mean, then re-z-score.
+
+    Bayesian shrinkage for small in-season samples:
+
+        stabilized = (minutes * player_p90 + K * pos_mean_p90) / (minutes + K)
+
+    A player with K minutes is pulled 50% toward her position's mean; with 3*K
+    minutes she keeps 75% of her own number. This stops a player with one strong
+    90-minute cameo from topping the table on noise.
+
+    IMPORTANT: the z-score is computed over the rows already in `vt`. Callers
+    must pre-filter `vt` to the qualifying (min_minutes) pool BEFORE calling this,
+    so the distribution isn't dominated by near-zero-minute players and the
+    resulting value_score stays comparable to completed-season tables (which
+    z-score over their qualified pool too).
+
+    K is the only tunable. Returns a copy; `weighted_ga_p90` and `value_score`
+    are replaced with stabilized versions. All other columns are untouched.
+    """
+    df = vt.copy()
+    if df.empty:
+        return df
+
+    pos_mean = df.groupby("position")["weighted_ga_p90"].transform("mean")
+    minutes = df["minutes_played"].astype(float)
+    df["weighted_ga_p90"] = (
+        (minutes * df["weighted_ga_p90"] + K * pos_mean) / (minutes + K)
+    )
+
+    df["value_score"] = df.groupby("position")["weighted_ga_p90"].transform(
+        lambda g: (g - g.mean()) / g.std() if g.std() > 0 else 0.0
+    )
+    df["value_score"] = df["value_score"].fillna(0.0)
+
+    df["weighted_ga_p90"] = df["weighted_ga_p90"].round(3)
+    df["value_score"] = df["value_score"].round(3)
+
+    return df.sort_values(["position", "value_score"], ascending=[True, False]).reset_index(drop=True)
 
 
 def rank_by_position(value_table: pd.DataFrame, position: str) -> pd.DataFrame:

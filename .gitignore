@@ -13,6 +13,11 @@ data/raw/
 data/processed/
 *.parquet
 
+# Phase B: 2026 in-season snapshots ARE committed — they seed Risers & Fallers
+# history and are the output the weekly GitHub Action commits.
+!data/snapshots/
+!data/snapshots/*.parquet
+
 # Claude Code session files
 .claude/
 

@@ -18,9 +18,17 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from src.analysis.ranking import build_player_value_table, rank_by_position, validate_value_table
+from src.analysis.ranking import (
+    build_player_value_table, rank_by_position, validate_value_table, apply_stabilization,
+)
 from src.analysis.college_ranking import build_college_value_table
 from src.analysis.drops import select_undervalued_xi, best_xi_excluded_names, undervalued_min_minutes
+from src.analysis.movement import (
+    list_snapshots, load_snapshot, compute_movement, select_risers_xi, select_fallers_xi,
+)
+from src.analysis.newcomers import (
+    build_historical_player_ids, identify_newcomers, select_newcomer_watch_xi,
+)
 from src.share.card import render_player_card, render_leaderboard_card
 from src.explain.insight import one_line_insight
 from src.data.sources import (
@@ -34,8 +42,8 @@ from src.agent.canned import CANNED_SEARCHES, run_canned
 from src.agent.scout import check_rate_limit, get_cached, run_scout_query
 from src.analysis.validation import run_validation, load_validation_cache, save_validation_cache
 
-AVAILABLE_SEASONS = ["2025", "2024", "2023", "2022", "2021", "2020", "2019"]
-DEFAULT_SEASON = "2025"
+AVAILABLE_SEASONS = ["2026", "2025", "2024", "2023", "2022", "2021", "2020", "2019"]
+DEFAULT_SEASON = "2025"   # 2025 (completed + validated) stays the default landing view
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -89,6 +97,32 @@ def load_value_table(min_minutes: int, season: str) -> pd.DataFrame:
     tm = fetch_teams()
     bd = fetch_player_birthdates()
     return build_player_value_table(ga, xg, pl, tm, birthdates=bd, min_minutes=min_minutes, season=season)
+
+
+@st.cache_data(show_spinner="Loading 2026 snapshot...", ttl=86400)
+def load_2026_table(min_minutes: int, snapshot_date: str) -> pd.DataFrame:
+    """2026 in-season table: latest snapshot, filtered to the qualifying pool,
+    then Bayesian-stabilized (K=300). Filtering BEFORE stabilization keeps the
+    within-position z-score comparable to completed seasons. Cache is keyed on
+    the snapshot date so a newly committed snapshot busts it automatically."""
+    vt_raw = load_snapshot(snapshot_date)
+    vt_filtered = vt_raw[vt_raw["minutes_played"] >= min_minutes].copy()
+    return apply_stabilization(vt_filtered, K=300)
+
+
+@st.cache_data(show_spinner=False, ttl=86400)
+def cached_historical_ids() -> set[str]:
+    """2019–2025 g+ player_ids, for tagging 2026 newcomers. Cached (reads 7 parquets)."""
+    return build_historical_player_ids()
+
+
+@st.cache_data(show_spinner=False, ttl=86400)
+def snapshot_games_est(snapshot_date: str) -> int:
+    """Estimate games played from the 90th-percentile minutes of a snapshot —
+    reflects how many games the top-load starters have played (not the median,
+    which understates it because of rotation/late signings)."""
+    vt_raw = load_snapshot(snapshot_date)
+    return int(vt_raw["minutes_played"].quantile(0.90) // 90)
 
 
 # ---------------------------------------------------------------------------
@@ -187,39 +221,85 @@ with st.sidebar:
         index=AVAILABLE_SEASONS.index(DEFAULT_SEASON),
     )
 
+    # 2026 is live/in-season: data comes from committed snapshots, not a season pull.
+    is_2026 = season == "2026"
+    latest_snap: str | None = None
+    games_est: int | None = None
+    if is_2026:
+        _snaps = list_snapshots("2026")
+        if not _snaps:
+            st.warning(
+                "No 2026 snapshots available yet. Run "
+                "`python scripts/snapshot.py --backfill` to seed them."
+            )
+            st.stop()
+        latest_snap = _snaps[-1]
+        games_est = snapshot_games_est(latest_snap)
+
     pos_options = [f"{p} — {POSITION_LABELS[p]}" for p in POSITION_ORDER]
     pos_choice = st.selectbox("Position", pos_options, index=0)
     selected_pos = pos_choice[:2].strip()
 
-    min_minutes = st.slider(
-        "Minimum minutes played",
-        min_value=90,
-        max_value=2000,
-        value=500,
-        step=90,
-    )
+    if is_2026:
+        # Floor scales with games played: 50% of games × 90 min, min 180.
+        _default_min = max(180, games_est * 45)
+        _max_min = max(360, games_est * 90)
+        min_minutes = st.slider(
+            "Minimum minutes played",
+            min_value=90,
+            max_value=_max_min,
+            value=min(_default_min, _max_min),
+            step=45,
+            help=f"~{games_est} games played · default = 50% of games × 90 min",
+        )
+    else:
+        min_minutes = st.slider(
+            "Minimum minutes played",
+            min_value=90,
+            max_value=2000,
+            value=500,
+            step=90,
+        )
 
-    # Data freshness — read mtime from the goals-added parquet for this season
-    _parquet_path = Path(__file__).parent / "data" / "raw" / f"nwsl_player_goals_added_{season}.parquet"
-    if _parquet_path.exists():
-        _mtime = datetime.fromtimestamp(_parquet_path.stat().st_mtime)
+    # Data freshness — for 2026, read the latest snapshot's mtime; otherwise the
+    # season goals-added parquet.
+    if is_2026:
+        _fresh_path = Path(__file__).parent / "data" / "snapshots" / f"value_2026_{latest_snap}.parquet"
+        st.caption(f"Latest snapshot: {latest_snap}  ·  ~{games_est} games played")
+    else:
+        _fresh_path = Path(__file__).parent / "data" / "raw" / f"nwsl_player_goals_added_{season}.parquet"
+    if _fresh_path.exists():
+        _mtime = datetime.fromtimestamp(_fresh_path.stat().st_mtime)
         st.caption(f"Data as of: {_mtime.strftime('%b %d, %Y %H:%M')}")
     else:
         st.caption("Data as of: not yet loaded")
 
-    if st.button("Refresh data", help="Re-pulls latest data from ASA + Wikidata ages. Takes ~20 seconds."):
-        with st.spinner("Pulling fresh data from ASA..."):
-            fetch_player_goals_added(season_name=season, refresh=True)
-            fetch_player_xgoals(season_name=season, refresh=True)
-            fetch_players(refresh=True)
-            fetch_teams(refresh=True)
-        with st.spinner("Refreshing player ages from Wikidata..."):
-            fetch_player_birthdates(refresh=True)
-        st.cache_data.clear()
-        st.rerun()
+    if is_2026:
+        if st.button("Refresh 2026 snapshot", help="Re-pulls cumulative 2026 g+ and rewrites today's snapshot. Takes ~20 seconds."):
+            from scripts.snapshot import write_snapshot
+            from datetime import date, timedelta
+            _cutoff = (date.today() - timedelta(days=1)).isoformat()
+            with st.spinner("Writing fresh 2026 snapshot..."):
+                write_snapshot(_cutoff, force=True)
+            st.cache_data.clear()
+            st.rerun()
+    else:
+        if st.button("Refresh data", help="Re-pulls latest data from ASA + Wikidata ages. Takes ~20 seconds."):
+            with st.spinner("Pulling fresh data from ASA..."):
+                fetch_player_goals_added(season_name=season, refresh=True)
+                fetch_player_xgoals(season_name=season, refresh=True)
+                fetch_players(refresh=True)
+                fetch_teams(refresh=True)
+            with st.spinner("Refreshing player ages from Wikidata..."):
+                fetch_player_birthdates(refresh=True)
+            st.cache_data.clear()
+            st.rerun()
 
     # Load full table (cached per season + min_minutes combination)
-    full_table = load_value_table(min_minutes, season)
+    if is_2026:
+        full_table = load_2026_table(min_minutes, latest_snap)
+    else:
+        full_table = load_value_table(min_minutes, season)
 
     # QA validation — runs on the returned DataFrame, not inside the cached loader
     _qa_warnings = validate_value_table(full_table)
@@ -282,6 +362,13 @@ with tab_rankings:
     # QA warnings (only shown when data has unexpected nulls or out-of-range values)
     for _w in _qa_warnings:
         st.warning(f"Data QA: {_w}")
+
+    if is_2026:
+        st.warning(
+            f"⚠️ **Early-season 2026** — ~{games_est} games played. Value scores are "
+            "stabilized (Bayesian shrinkage toward the position mean, K=300) so small "
+            "samples don't dominate. Treat rankings as directional, not definitive."
+        )
 
     pos_label = POSITION_LABELS[selected_pos]
     st.subheader(f"{len(ranked)} {pos_label}s ranked by value score")
@@ -359,12 +446,17 @@ with the weights or want to compare across positions.
         # Player cards
         # -------------------------------------------------------------------
         for i, row in ranked.iterrows():
+            _sample = (
+                f"·  {int(row['minutes_played']):,} min / ~{int(row['minutes_played'] / 90)} games"
+                if is_2026
+                else f"·  {int(row['minutes_played']):,} min"
+            )
             card_label = (
                 f"#{int(row['_rank'])}  {row['player_name']}  ·  {row['team_abbreviation']}  "
                 f"·  Value: {row['value_score']:.2f}  "
                 f"·  Wtd g+/90: {row['weighted_ga_p90']:.2f}  "
                 f"·  xG+xA/90: {row['xga_p90']:.2f}  "
-                f"·  {int(row['minutes_played']):,} min"
+                f"{_sample}"
             )
 
             with st.expander(card_label, expanded=False):
@@ -933,73 +1025,171 @@ strength-of-schedule are not accounted for.
 # ---------------------------------------------------------------------------
 # Tab 5: Drops — Undervalued XI
 # ---------------------------------------------------------------------------
+def _leaderboard_stats_table(rows: list[dict], value_label: str = "Value score") -> None:
+    """Render the 'full stats' expander for a leaderboard card's filled slots."""
+    filled = [r for r in rows if r["player_name"] != "—"]
+    if not filled:
+        return
+    df = pd.DataFrame([{
+        "Position": r["position"],
+        "Player":   r["player_name"],
+        "Team":     r["team_name"],
+        value_label: f"{r['value_score']:+.2f}",
+        "Minutes":  f"{r['minutes_played']:,}",
+        "Rank in pos": f"#{r['rank_in_position']} of {r['cohort_size']}"
+                       if r.get("rank_in_position") else "—",
+    } for r in filled])
+    with st.expander("Selected XI — full stats", expanded=False):
+        st.dataframe(df, hide_index=True, use_container_width=True)
+
+
 with tab_drops:
-    _uv_min = undervalued_min_minutes(season)
-    st.subheader(f"Undervalued XI — {season}")
-    st.caption(
-        f"Highest-value outfield players NOT named to the {season} NWSL Best XI (First or Second XI). "
-        f"Minimum **{_uv_min:,} minutes** (~75% of possible playing time) — injury-shortened seasons excluded. "
-        "GK excluded — our model covers outfield positions only."
-    )
-
-    # Cache key includes season + min_minutes + layout version so stale PNGs are busted.
-    _drops_key = f"drops_png_{season}_{min_minutes}_v5"
-    _rows_key  = f"drops_rows_{season}_{min_minutes}_v5"
-
-    if _drops_key not in st.session_state:
-        try:
-            with st.spinner("Generating Undervalued XI..."):
-                _rows = select_undervalued_xi(full_table, season, min_minutes)
-                _png  = render_leaderboard_card(
-                    _rows,
-                    title="Undervalued XI",
-                    season=season,
-                    subtitle="Top-value outfield players outside the Best XI  ·  Outfield only",
-                )
-            st.session_state[_drops_key] = _png
-            st.session_state[_rows_key]  = _rows
-        except ValueError as e:
-            st.warning(str(e))
-        except Exception as e:
-            st.error(f"Could not render Undervalued XI: {e}")
-
-    if _drops_key in st.session_state:
-        _drops_bytes = st.session_state[_drops_key]
-        _drop_rows   = st.session_state.get(_rows_key, [])
-
-        st.image(_drops_bytes, use_container_width=True)
-        st.download_button(
-            label="⬇ Download Undervalued XI (PNG)",
-            data=_drops_bytes,
-            file_name=f"undervalued_xi_{season}.png",
-            mime="image/png",
-            key="dl_undervalued_xi",
+    if not is_2026:
+        # ---- Undervalued XI (completed seasons only) ----------------------
+        _uv_min = undervalued_min_minutes(season)
+        st.subheader(f"Undervalued XI — {season}")
+        st.caption(
+            f"Highest-value outfield players NOT named to the {season} NWSL Best XI (First or Second XI). "
+            f"Minimum **{_uv_min:,} minutes** (~75% of possible playing time) — injury-shortened seasons excluded. "
+            "GK excluded — our model covers outfield positions only."
         )
 
-        _filled = [r for r in _drop_rows if r["player_name"] != "—"]
-        if _filled:
-            _drop_df = pd.DataFrame([{
-                "Position": r["position"],
-                "Player":   r["player_name"],
-                "Team":     r["team_name"],
-                "Value score": f"{r['value_score']:+.2f}",
-                "Minutes":  f"{r['minutes_played']:,}",
-                "Rank in pos": f"#{r['rank_in_position']} of {r['cohort_size']}",
-            } for r in _filled])
-            with st.expander("Selected XI — full stats", expanded=False):
-                st.dataframe(_drop_df, hide_index=True, use_container_width=True)
+        _drops_key = f"drops_png_{season}_{min_minutes}_v5"
+        _rows_key  = f"drops_rows_{season}_{min_minutes}_v5"
 
-        with st.expander(f"Who was excluded (Best XI + Second XI {season})", expanded=False):
-            first_names, second_names = best_xi_excluded_names(season)
-            col_a, col_b = st.columns(2)
-            with col_a:
-                st.markdown("**First XI**")
-                for n in first_names:
-                    st.caption(n)
-            with col_b:
-                st.markdown("**Second XI**")
-                for n in second_names:
-                    st.caption(n)
+        if _drops_key not in st.session_state:
+            try:
+                with st.spinner("Generating Undervalued XI..."):
+                    _rows = select_undervalued_xi(full_table, season, min_minutes)
+                    _png  = render_leaderboard_card(
+                        _rows,
+                        title="Undervalued XI",
+                        season=season,
+                        subtitle="Top-value outfield players outside the Best XI  ·  Outfield only",
+                    )
+                st.session_state[_drops_key] = _png
+                st.session_state[_rows_key]  = _rows
+            except ValueError as e:
+                st.warning(str(e))
+            except Exception as e:
+                st.error(f"Could not render Undervalued XI: {e}")
+
+        if _drops_key in st.session_state:
+            _drops_bytes = st.session_state[_drops_key]
+            _drop_rows   = st.session_state.get(_rows_key, [])
+
+            st.image(_drops_bytes, use_container_width=True)
+            st.download_button(
+                label="⬇ Download Undervalued XI (PNG)",
+                data=_drops_bytes,
+                file_name=f"undervalued_xi_{season}.png",
+                mime="image/png",
+                key="dl_undervalued_xi",
+            )
+            _leaderboard_stats_table(_drop_rows)
+
+            with st.expander(f"Who was excluded (Best XI + Second XI {season})", expanded=False):
+                first_names, second_names = best_xi_excluded_names(season)
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.markdown("**First XI**")
+                    for n in first_names:
+                        st.caption(n)
+                with col_b:
+                    st.markdown("**Second XI**")
+                    for n in second_names:
+                        st.caption(n)
+
+    else:
+        # ================= 2026 in-season drops =============================
+        st.info(
+            "**Undervalued XI** requires a completed season's Best XI to compare against — "
+            "select **2025** or earlier. The 2026 drops below are **Risers & Fallers** and "
+            "**Newcomer Watch**."
+        )
+
+        # ---- Risers & Fallers ---------------------------------------------
+        st.divider()
+        st.subheader("Risers & Fallers — 2026")
+        _snaps = list_snapshots("2026")
+        if len(_snaps) < 2:
+            st.warning("Not enough data yet — Risers & Fallers needs at least two snapshots. Check back after more games.")
+        else:
+            _old_idx = max(0, len(_snaps) - 5)   # ~4 weeks prior
+            _snap_new, _snap_old = _snaps[-1], _snaps[_old_idx]
+            _weeks_ago = (len(_snaps) - 1) - _old_idx
+            st.caption(
+                f"Value-score movement from **{_snap_old}** to **{_snap_new}** "
+                f"(~{_weeks_ago} week{'s' if _weeks_ago != 1 else ''} apart). "
+                f"Minimum {max(270, min_minutes):,} minutes in the latest snapshot — "
+                "scores stabilized (K=300) so small samples can't fake a surge."
+            )
+
+            _rf_key = f"drops_rf_{_snap_new}_{_snap_old}_{min_minutes}_v1"
+            if _rf_key not in st.session_state:
+                with st.spinner("Computing risers & fallers..."):
+                    _mv = compute_movement(
+                        load_snapshot(_snap_new), load_snapshot(_snap_old),
+                        K=300, min_minutes_new=max(270, min_minutes),
+                    )
+                    _rise_rows = select_risers_xi(_mv)
+                    _fall_rows = select_fallers_xi(_mv)
+                    _win = f"vs {_snap_old}  ·  ~{_weeks_ago}w"
+                    _rise_png = render_leaderboard_card(
+                        _rise_rows, title="Risers", season="2026",
+                        subtitle=f"Biggest value-score gains  ·  {_win}",
+                    )
+                    _fall_png = render_leaderboard_card(
+                        _fall_rows, title="Fallers", season="2026",
+                        subtitle=f"Biggest value-score drops  ·  {_win}",
+                    )
+                st.session_state[_rf_key] = (_rise_png, _fall_png, _rise_rows, _fall_rows)
+
+            _rise_png, _fall_png, _rise_rows, _fall_rows = st.session_state[_rf_key]
+            col_r, col_f = st.columns(2)
+            with col_r:
+                st.markdown("**📈 Risers**")
+                st.image(_rise_png, use_container_width=True)
+                st.download_button("⬇ Risers (PNG)", data=_rise_png,
+                                   file_name=f"risers_2026_{_snap_new}.png",
+                                   mime="image/png", key="dl_risers")
+            with col_f:
+                st.markdown("**📉 Fallers**")
+                st.image(_fall_png, use_container_width=True)
+                st.download_button("⬇ Fallers (PNG)", data=_fall_png,
+                                   file_name=f"fallers_2026_{_snap_new}.png",
+                                   mime="image/png", key="dl_fallers")
+
+        # ---- Newcomer Watch -----------------------------------------------
+        st.divider()
+        st.subheader("Newcomers · First Year in NWSL — 2026")
+        st.caption(
+            "Highest-value outfield players in their **first NWSL season** — college free-agent "
+            "signings, international transfers, and returnees alike. Value scores are stabilized "
+            "and measured against the whole 2026 league. GK excluded."
+        )
+
+        _nw_key = f"drops_newcomers_{latest_snap}_{min_minutes}_v1"
+        if _nw_key not in st.session_state:
+            with st.spinner("Finding newcomers..."):
+                _hist = cached_historical_ids()
+                _newcomer_table = full_table[
+                    ~full_table["player_id"].astype(str).isin(_hist)
+                ].copy()
+                _nw_rows = select_newcomer_watch_xi(_newcomer_table)
+                _nw_png = render_leaderboard_card(
+                    _nw_rows, title="Newcomers",
+                    season="2026",
+                    subtitle="First-year NWSL players by value score  ·  Outfield only",
+                )
+            st.session_state[_nw_key] = (_nw_png, _nw_rows)
+
+        _nw_png, _nw_rows = st.session_state[_nw_key]
+        st.image(_nw_png, use_container_width=True)
+        st.download_button("⬇ Download Newcomers XI (PNG)", data=_nw_png,
+                           file_name=f"newcomers_2026_{latest_snap}.png",
+                           mime="image/png", key="dl_newcomers")
+        _leaderboard_stats_table(_nw_rows)
 
 
 # ---------------------------------------------------------------------------

@@ -49,6 +49,7 @@ _SEASON_GAMES: dict[int, int] = {
     2023: 22,
     2024: 26,
     2025: 26,
+    2026: 26,   # projected full season; 75% floor = 1755 min (matches 2025)
 }
 _DEFAULT_GAMES = 26
 

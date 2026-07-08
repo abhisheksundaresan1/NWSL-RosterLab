@@ -42,7 +42,8 @@ _asa = AmericanSoccerAnalysis()
 
 # Seasons available in the ASA NWSL dataset (most recent first).
 # The API has no "list seasons" endpoint so these are hardcoded.
-AVAILABLE_SEASONS = ["2025", "2024", "2023", "2022", "2021", "2020", "2019"]
+# 2026 is the current in-season year (data via snapshots — see scripts/snapshot.py).
+AVAILABLE_SEASONS = ["2026", "2025", "2024", "2023", "2022", "2021", "2020", "2019"]
 DEFAULT_SEASON = "2025"
 
 
@@ -77,16 +78,46 @@ def fetch_player_xgoals(refresh: bool = False, season_name: str | None = None) -
     return df
 
 
-def fetch_player_goals_added(refresh: bool = False, season_name: str | None = None) -> pd.DataFrame:
+def fetch_player_goals_added(
+    refresh: bool = False,
+    season_name: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> pd.DataFrame:
     """NWSL player goals added (g+) data (cached to data/raw).
 
-    season_name: e.g. "2025". None fetches all seasons aggregated.
+    Two mutually exclusive query modes (ASA cannot combine them):
+      - season_name: e.g. "2025" (a full completed/aggregated season).
+      - start_date/end_date: "YYYY-MM-DD" window for cumulative in-season g+
+        (used by the 2026 snapshot pipeline). Either or both may be given.
+
+    None of the three → all seasons aggregated.
+
+    Cache key encodes whichever mode is used so windows don't collide:
+      season_name="2025"                      -> nwsl_player_goals_added_2025.parquet
+      start=2026-03-13, end=2026-06-20         -> nwsl_player_goals_added_2026-03-13_2026-06-20.parquet
+      neither                                  -> nwsl_player_goals_added_all.parquet
     """
-    suffix = season_name if season_name else "all"
+    if season_name and (start_date or end_date):
+        raise ValueError("Pass either season_name OR start_date/end_date, not both (ASA restriction).")
+
+    if start_date or end_date:
+        suffix = f"{start_date or 'start'}_{end_date or 'end'}"
+        kwargs = {}
+        if start_date:
+            kwargs["start_date"] = start_date
+        if end_date:
+            kwargs["end_date"] = end_date
+    elif season_name:
+        suffix = season_name
+        kwargs = {"season_name": season_name}
+    else:
+        suffix = "all"
+        kwargs = {}
+
     path = _cache_path(f"nwsl_player_goals_added_{suffix}")
     if path.exists() and not refresh:
         return pd.read_parquet(path)
-    kwargs = {"season_name": season_name} if season_name else {}
     df = _asa.get_player_goals_added(leagues="nwsl", **kwargs)
     df = _flatten_mixed_columns(df)
     df.to_parquet(path, index=False)

@@ -1,0 +1,56 @@
+name: Weekly 2026 snapshot
+
+# Writes a cumulative 2026 value snapshot to data/snapshots/ and commits it.
+# Tuesday 12:00 UTC gives a ~72h buffer after Saturday matches, so it's safe
+# even if ASA lags a day. The run always uses --force, so if last week's ASA
+# update was delayed the next run re-fetches the current week and self-corrects.
+
+on:
+  schedule:
+    - cron: '0 12 * * 2'   # Tuesday 12:00 UTC
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Cutoff date (YYYY-MM-DD, blank = yesterday)'
+        required: false
+
+permissions:
+  contents: write   # needed to push the committed snapshot
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Write snapshot
+        run: |
+          if [ -n "${{ github.event.inputs.date }}" ]; then
+            python scripts/snapshot.py --date "${{ github.event.inputs.date }}" --force
+          else
+            python scripts/snapshot.py --force
+          fi
+
+      - name: Commit and push snapshot
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/snapshots/
+          if git diff --staged --quiet; then
+            echo "No snapshot changes to commit."
+          else
+            git commit -m "snapshot: 2026 value table $(date -u +%Y-%m-%d)"
+            git push
+          fi
