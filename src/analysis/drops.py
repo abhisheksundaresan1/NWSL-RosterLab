@@ -52,6 +52,12 @@ _SEASON_GAMES: dict[int, int] = {
 }
 _DEFAULT_GAMES = 26
 
+# Only fill a slot if the best eligible player at that position ranks in the
+# top UNDERVALUED_TOP_N players OR the top UNDERVALUED_TOP_PCT of her position
+# cohort (whichever is more generous). Prevents league-average fillers.
+UNDERVALUED_TOP_N   = 3
+UNDERVALUED_TOP_PCT = 0.30
+
 
 def undervalued_min_minutes(season: int | str) -> int:
     """Return the 75%-of-possible-minutes threshold for a given NWSL season."""
@@ -128,18 +134,16 @@ def select_undervalued_xi(
             "Re-run fetch_best_xi(refresh=True) to pull latest Wikipedia data."
         )
 
-    # --- Build exclusion set (alias → normalize) ----------------------------
+    # --- Build exclusion set (both canonical and aliased names) -------------
+    # Include BOTH the original wiki/seed spelling AND the ASA alias so that
+    # a wrong or incomplete alias cannot cause a Best XI player to slip through.
     alias_map = load_name_aliases()   # {normalized_canonical: normalized_asa}
 
-    def _resolve(name: str) -> str:
-        """alias-aware normalization: canonical_name → asa_name → normalized."""
-        norm = normalize_name(name)
-        return alias_map.get(norm, norm)
-
-    exclusion_set: set[str] = {
-        _resolve(n)
-        for n in season_bxi["player_name"]
-    }
+    exclusion_set: set[str] = set()
+    for n in season_bxi["player_name"]:
+        orig = normalize_name(n)
+        exclusion_set.add(orig)                       # canonical (wiki/seed) form
+        exclusion_set.add(alias_map.get(orig, orig))  # ASA alias form (may equal orig)
 
     # --- Apply minutes floor to value_table --------------------------------
     # Use the higher of the caller's floor and the full-season threshold so
@@ -161,18 +165,26 @@ def select_undervalued_xi(
         x, y     = SLOT_COORDS[slot]
 
         try:
-            ranked = rank_by_position(vt, position)
+            full_cohort = rank_by_position(vt, position)
         except ValueError:
             # No players at this position above the minutes floor
             result.append(_empty_slot(slot, position, line, x, y))
             continue
 
-        picked = None
-        for _, row in ranked.iterrows():
+        cohort_size = len(full_cohort)
+        threshold   = max(UNDERVALUED_TOP_N, int(cohort_size * UNDERVALUED_TOP_PCT))
+
+        # Only consider players who rank within the threshold window. If no
+        # non-excluded player falls within the window, leave the slot empty
+        # rather than filling it with a league-average player.
+        picked      = None
+        rank_in_pos = None
+        for rank_0, (_, row) in enumerate(full_cohort.head(threshold).iterrows()):
             norm = normalize_name(row["player_name"])
             if norm in exclusion_set or norm in picked_names:
                 continue
-            picked = row
+            picked      = row
+            rank_in_pos = rank_0 + 1
             picked_names.add(norm)
             break
 
@@ -180,25 +192,19 @@ def select_undervalued_xi(
             result.append(_empty_slot(slot, position, line, x, y))
             continue
 
-        # rank_in_position = 1-based index in the full position cohort
-        full_cohort = rank_by_position(vt, position)
-        rank_series = full_cohort.reset_index(drop=True)
-        rank_idx = rank_series[rank_series["player_name"] == picked["player_name"]].index
-        rank_in_pos = int(rank_idx[0]) + 1 if len(rank_idx) else None
-
         result.append({
-            "slot":             slot,
-            "position":         position,
-            "line":             line,
-            "x":                x,
-            "y":                y,
-            "player_name":      picked["player_name"],
-            "team_name":        picked.get("team_name", ""),
+            "slot":              slot,
+            "position":          position,
+            "line":              line,
+            "x":                 x,
+            "y":                 y,
+            "player_name":       picked["player_name"],
+            "team_name":         picked.get("team_name", ""),
             "team_abbreviation": picked.get("team_abbreviation", ""),
-            "value_score":      float(picked["value_score"]),
-            "minutes_played":   int(picked["minutes_played"]),
-            "rank_in_position": rank_in_pos,
-            "cohort_size":      len(full_cohort),
+            "value_score":       float(picked["value_score"]),
+            "minutes_played":    int(picked["minutes_played"]),
+            "rank_in_position":  rank_in_pos,
+            "cohort_size":       cohort_size,
         })
 
     return result

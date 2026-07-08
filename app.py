@@ -943,8 +943,8 @@ with tab_drops:
     )
 
     # Cache key includes season + min_minutes + layout version so stale PNGs are busted.
-    _drops_key = f"drops_png_{season}_{min_minutes}_v4"
-    _rows_key  = f"drops_rows_{season}_{min_minutes}_v4"
+    _drops_key = f"drops_png_{season}_{min_minutes}_v5"
+    _rows_key  = f"drops_rows_{season}_{min_minutes}_v5"
 
     if _drops_key not in st.session_state:
         try:
