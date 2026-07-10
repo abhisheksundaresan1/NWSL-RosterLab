@@ -618,7 +618,7 @@ with tab_draft:
 
         board_selection = st.dataframe(
             styled_df,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             on_select="rerun",
             selection_mode="single-row",
@@ -683,7 +683,7 @@ with tab_draft:
                         chart_df["season"] = chart_df["season"].map(season_labels).fillna(chart_df["season"])
                         chart_df = chart_df.set_index("season")
                         st.line_chart(chart_df, y=["goals_pg", "assists_pg", "points_pg"],
-                                      y_label="Per Game", use_container_width=True, height=200)
+                                      y_label="Per Game", width="stretch", height=200)
                     else:
                         st.caption("Only one season of data — trend chart needs 2+ seasons.")
                 st.divider()
@@ -710,7 +710,7 @@ with tab_draft:
                 "gp":             st.column_config.NumberColumn("Games", format="%.0f"),
             }
             fp_display = [c for c in draftable_summary.columns if c in fp_col_config]
-            st.dataframe(draftable_summary[fp_display], use_container_width=True, hide_index=True,
+            st.dataframe(draftable_summary[fp_display], width="stretch", hide_index=True,
                          column_config=fp_col_config)
 
         st.divider()
@@ -724,7 +724,7 @@ with tab_draft:
             trend_cols = [c for c in trend_cols if c in trends.columns]
             st.dataframe(
                 trends[trend_cols].head(20),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
                 column_config={
                     "goals_pg_delta":   st.column_config.NumberColumn("Goals/G Δ", format="%+.2f"),
@@ -750,7 +750,7 @@ with tab_scout:
             if st.button(
                 f"{search['icon']} {search['label']}",
                 key=f"canned_{i}",
-                use_container_width=True,
+                width="stretch",
             ):
                 df_result, description = run_canned(search["label"], season, min_minutes)
                 st.session_state["canned_result"] = df_result
@@ -764,7 +764,7 @@ with tab_scout:
         if df_c.empty:
             st.warning("No players found. Try a different season or lower the minimum minutes.")
         else:
-            st.dataframe(df_c, use_container_width=True, hide_index=True)
+            st.dataframe(df_c, width="stretch", hide_index=True)
 
     st.divider()
 
@@ -950,7 +950,7 @@ with tab_validation:
             "Median rank": _fmt(first.get("median_rank"), 1),
         })
     if per_season_rows:
-        st.dataframe(pd.DataFrame(per_season_rows), hide_index=True, use_container_width=True)
+        st.dataframe(pd.DataFrame(per_season_rows), hide_index=True, width="stretch")
 
     # -----------------------------------------------------------------------
     # Row 6: Best XI player detail table
@@ -978,7 +978,7 @@ with tab_validation:
         st.dataframe(
             display_bxi[["Season", "XI", "Bucket", "Player", "ASA name", "Our rank", "Value score", "Status"]],
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
             column_config={
                 "Our rank": st.column_config.NumberColumn("Our rank", format="%d"),
             },
@@ -1071,7 +1071,7 @@ def _leaderboard_stats_table(rows: list[dict], value_label: str = "Value score")
 
     df = pd.DataFrame([_row(r) for r in filled])
     with st.expander("Selected XI — full stats", expanded=False):
-        st.dataframe(df, hide_index=True, use_container_width=True)
+        st.dataframe(df, hide_index=True, width="stretch")
 
 
 with tab_drops:
@@ -1109,7 +1109,7 @@ with tab_drops:
             _drops_bytes = st.session_state[_drops_key]
             _drop_rows   = st.session_state.get(_rows_key, [])
 
-            st.image(_drops_bytes, use_container_width=True)
+            st.image(_drops_bytes, width="stretch")
             st.download_button(
                 label="⬇ Download Undervalued XI (PNG)",
                 data=_drops_bytes,
@@ -1180,13 +1180,13 @@ with tab_drops:
             col_r, col_f = st.columns(2)
             with col_r:
                 st.markdown("**📈 Risers**")
-                st.image(_rise_png, use_container_width=True)
+                st.image(_rise_png, width="stretch")
                 st.download_button("⬇ Risers (PNG)", data=_rise_png,
                                    file_name=f"risers_2026_{_snap_new}.png",
                                    mime="image/png", key="dl_risers")
             with col_f:
                 st.markdown("**📉 Fallers**")
-                st.image(_fall_png, use_container_width=True)
+                st.image(_fall_png, width="stretch")
                 st.download_button("⬇ Fallers (PNG)", data=_fall_png,
                                    file_name=f"fallers_2026_{_snap_new}.png",
                                    mime="image/png", key="dl_fallers")
@@ -1216,7 +1216,7 @@ with tab_drops:
             st.session_state[_nw_key] = (_nw_png, _nw_rows)
 
         _nw_png, _nw_rows = st.session_state[_nw_key]
-        st.image(_nw_png, use_container_width=True)
+        st.image(_nw_png, width="stretch")
         st.download_button("⬇ Download Newcomers XI (PNG)", data=_nw_png,
                            file_name=f"newcomers_2026_{latest_snap}.png",
                            mime="image/png", key="dl_newcomers")
