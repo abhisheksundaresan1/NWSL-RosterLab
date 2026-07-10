@@ -64,8 +64,15 @@ def identify_newcomers(
     return season_2026_ga[mask].copy()
 
 
-def _college_percentile_map() -> dict[str, float]:
-    """Normalized college player name → draft_percentile, for the college bridge.
+def _college_value_map() -> dict[str, float]:
+    """Normalized college player name → college-value percentile (0–100).
+
+    Bridges a first-year NWSL player to how she rated in college by conference-
+    adjusted attacking output. NWSL abolished the college draft in the 2024 CBA,
+    so this is framed as college VALUE, not a draft ranking. (The source column
+    from build_college_value_table is still named `draft_percentile` internally —
+    that belongs to the separate Draft Board feature — but here it means the
+    player's college output percentile.)
 
     Best-effort: any failure (missing NCAA cache, schema drift) yields an empty
     map and the bridge is silently skipped.
@@ -91,9 +98,9 @@ def select_newcomer_watch_xi(newcomer_vt: pd.DataFrame) -> list[dict]:
     Same top-N / top-PCT threshold + sentinel as the Undervalued XI: a slot is
     only filled if the best available newcomer ranks within the position window;
     otherwise a sentinel keeps a weak player off the card. Annotates each pick
-    with `college_percentile` when the name matches the college draft board.
+    with `college_value_percentile` when the name matches the college value table.
     """
-    college = _college_percentile_map()
+    college = _college_value_map()
     picked_names: set[str] = set()
     result: list[dict] = []
 
@@ -135,7 +142,7 @@ def select_newcomer_watch_xi(newcomer_vt: pd.DataFrame) -> list[dict]:
         }
         pct = college.get(str(picked["player_name"]).lower().strip())
         if pct is not None:
-            entry["college_percentile"] = pct
+            entry["college_value_percentile"] = pct
         result.append(entry)
 
     return result

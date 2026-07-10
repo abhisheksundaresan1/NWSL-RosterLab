@@ -1043,19 +1043,33 @@ strength-of-schedule are not accounted for.
 # Tab 5: Drops — Undervalued XI
 # ---------------------------------------------------------------------------
 def _leaderboard_stats_table(rows: list[dict], value_label: str = "Value score") -> None:
-    """Render the 'full stats' expander for a leaderboard card's filled slots."""
+    """Render the 'full stats' expander for a leaderboard card's filled slots.
+
+    If any row carries `college_value_percentile` (Newcomer Watch), a
+    "College value (%ile)" column is added — the player's conference-adjusted
+    college output percentile. NWSL has no college draft since the 2024 CBA, so
+    this is labelled as college value, never a draft ranking."""
     filled = [r for r in rows if r["player_name"] != "—"]
     if not filled:
         return
-    df = pd.DataFrame([{
-        "Position": r["position"],
-        "Player":   r["player_name"],
-        "Team":     r["team_name"],
-        value_label: f"{r['value_score']:+.2f}",
-        "Minutes":  f"{r['minutes_played']:,}",
-        "Rank in pos": f"#{r['rank_in_position']} of {r['cohort_size']}"
-                       if r.get("rank_in_position") else "—",
-    } for r in filled])
+    show_college = any("college_value_percentile" in r for r in filled)
+
+    def _row(r: dict) -> dict:
+        d = {
+            "Position": r["position"],
+            "Player":   r["player_name"],
+            "Team":     r["team_name"],
+            value_label: f"{r['value_score']:+.2f}",
+            "Minutes":  f"{r['minutes_played']:,}",
+            "Rank in pos": f"#{r['rank_in_position']} of {r['cohort_size']}"
+                           if r.get("rank_in_position") else "—",
+        }
+        if show_college:
+            pct = r.get("college_value_percentile")
+            d["College value (%ile)"] = f"{pct:.0f}" if pct is not None else "—"
+        return d
+
+    df = pd.DataFrame([_row(r) for r in filled])
     with st.expander("Selected XI — full stats", expanded=False):
         st.dataframe(df, hide_index=True, use_container_width=True)
 
