@@ -110,6 +110,23 @@ def load_2026_table(min_minutes: int, snapshot_date: str) -> pd.DataFrame:
     return apply_stabilization(vt_filtered, K=300)
 
 
+def _season_value_table(min_minutes: int, season: str) -> pd.DataFrame:
+    """Single source of truth for a season's value table so the Rankings list,
+    the player cards and the LLM insights all agree on the same numbers.
+
+    2026 uses the latest stabilized snapshot (identical to what load_2026_table
+    feeds the list); completed seasons use the cached ASA pull. Kept uncached and
+    cheap for 2026 (reads a parquet + stabilizes) to avoid nesting st.cache_data
+    calls; the non-2026 branch reuses the already-cached load_value_table."""
+    if season == "2026":
+        snaps = list_snapshots("2026")
+        if not snaps:
+            return pd.DataFrame()
+        vt_raw = load_snapshot(snaps[-1])
+        return apply_stabilization(vt_raw[vt_raw["minutes_played"] >= min_minutes].copy(), K=300)
+    return load_value_table(min_minutes, season)
+
+
 @st.cache_data(show_spinner=False, ttl=86400)
 def cached_historical_ids() -> set[str]:
     """2019–2025 g+ player_ids, for tagging 2026 newcomers. Cached (reads 7 parquets)."""
@@ -132,7 +149,7 @@ def snapshot_games_est(snapshot_date: str) -> int:
 @st.cache_data(show_spinner=False)
 def _cached_insight(player_name: str, season: str, min_minutes: int, position: str) -> str:
     """Cache only successful LLM outputs. Raises on failure so st.cache_data skips storage."""
-    full   = load_value_table(min_minutes, season)
+    full   = _season_value_table(min_minutes, season)
     cohort = rank_by_position(full, position).copy()
     cohort["_rank"] = range(1, len(cohort) + 1)
     match  = cohort[cohort["player_name"] == player_name]
@@ -158,7 +175,7 @@ def get_insight(player_name: str, season: str, min_minutes: int, position: str) 
 def _cached_player_card(player_name: str, season: str, min_minutes: int, position: str,
                         card_version: int = 5) -> bytes:
     """Cache rendered PNG bytes. card_version busts stale cached cards after layout changes."""
-    full   = load_value_table(min_minutes, season)
+    full   = _season_value_table(min_minutes, season)
     cohort = rank_by_position(full, position).copy()
     cohort["_rank"] = range(1, len(cohort) + 1)
     match  = cohort[cohort["player_name"] == player_name]
