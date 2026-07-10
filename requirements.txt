@@ -1,23 +1,30 @@
+# Pinned to the versions verified working locally so Streamlit Community Cloud
+# reproduces the same environment. Unpinned, Cloud installs the latest Streamlit,
+# which (past 2025-12-31) removed the `use_container_width` argument the app uses
+# and crashed the deployed app with "Error running app". Bump deliberately, and
+# re-verify on Cloud after any change.
+
 # Core
-pandas
-streamlit
+streamlit==1.58.0
+pandas==3.0.3
+numpy==2.4.6
 
 # Data access
-itscalledsoccer        # American Soccer Analysis API (primary)
-requests               # Wikidata SPARQL + Wikipedia fetches
-beautifulsoup4         # Wikipedia HTML parsing (Best XI validation)
-lxml                   # HTML parser backend for pandas.read_html and BeautifulSoup
-statsbombpy            # StatsBomb open data (deep historical)
+itscalledsoccer==2.1.0
+requests==2.34.2
+beautifulsoup4==4.15.0
+lxml==6.1.1
+statsbombpy==1.19.0
 # soccerdata           # FBref scrapers — not used in app, excluded to avoid heavy selenium dep
 
 # Visualization
-mplsoccer
-matplotlib
-Pillow>=10.0             # player card PNG rendering (src/share/card.py)
+mplsoccer==1.6.1
+matplotlib==3.11.0
+Pillow==12.2.0
 
 # LLM explanation layer (Phase 3)
-anthropic
-python-dotenv
+anthropic==0.109.1
+python-dotenv==1.2.2
 
 # Storage (parquet cache)
-pyarrow
+pyarrow==24.0.0
