@@ -965,9 +965,9 @@ with tab_validation:
         display_bxi["Bucket"] = display_bxi["position_group"]
         display_bxi["Player"] = display_bxi["best_xi_name"]
         display_bxi["ASA name"] = display_bxi["asa_name"].fillna("—")
-        display_bxi["Our rank"] = display_bxi["bucket_rank"].apply(
-            lambda x: int(x) if pd.notna(x) else "—"
-        )
+        # Nullable Int64 (not int/"—" mixed) so Arrow can serialize it cleanly;
+        # NumberColumn renders missing ranks as a blank cell.
+        display_bxi["Our rank"] = display_bxi["bucket_rank"].astype("Int64")
         display_bxi["Value score"] = display_bxi["value_score"].apply(
             lambda x: f"{x:.2f}" if pd.notna(x) else "—"
         )
