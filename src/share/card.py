@@ -391,10 +391,10 @@ def render_player_card(
 
     # --- Zone 2: Identity (220-340) ---
     name_font = _get_bold_font(48)
-    draw.text((54, 232), _clean(str(row.get("player_name", ""))),
+    draw.text((54, 232), _clean_text(str(row.get("player_name", ""))),
               font=name_font, fill=TEXT_PRIMARY)
     sub_font = _get_font(28)
-    sub_text = _clean(f"{row.get('team_name', '')}  ·  {pos_label}{age_str}  ·  {season}")
+    sub_text = _clean_text(f"{row.get('team_name', '')}  ·  {pos_label}{age_str}  ·  {season}")
     draw.text((54, 292), sub_text, font=sub_font, fill=TEXT_SECONDARY)
 
     # --- Zone 3: Value banner (340-440) ---

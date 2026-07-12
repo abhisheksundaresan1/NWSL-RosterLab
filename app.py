@@ -487,19 +487,32 @@ with the weights or want to compare across positions.
                 if insight_key in st.session_state:
                     st.info(f"**Analyst take:** {st.session_state[insight_key]}")
 
-                try:
-                    card_bytes = _cached_player_card(
-                        row["player_name"], season, min_minutes, selected_pos
-                    )
+                # The shareable card renders a PNG and calls the LLM for its
+                # analyst line (~10s each). Generating it for every player on load
+                # made the page take minutes, so it's on demand — only the player
+                # whose button is clicked pays the cost (and it's cached after).
+                _card_key = f"cardpng__{row['player_name']}__{season}__{selected_pos}__{min_minutes}"
+                if _card_key not in st.session_state:
+                    if st.button("Prepare shareable card", key=f"prep__{_card_key}"):
+                        with st.spinner("Rendering card (incl. analyst line)…"):
+                            try:
+                                st.session_state[_card_key] = _cached_player_card(
+                                    row["player_name"], season, min_minutes, selected_pos
+                                )
+                            except Exception:
+                                st.session_state[_card_key] = b""  # attempted, failed
+                        st.rerun()
+                _card_bytes = st.session_state.get(_card_key)
+                if _card_bytes:
                     st.download_button(
                         label="⬇ Download card (PNG)",
-                        data=card_bytes,
+                        data=_card_bytes,
                         file_name=f"{row['player_name'].replace(' ', '_')}_{season}_nwsl_rosterlab.png",
                         mime="image/png",
                         key=f"dl_{row['player_name']}_{season}",
                     )
-                except Exception:
-                    pass  # never crash the Rankings tab over a card render failure
+                elif _card_key in st.session_state:
+                    st.caption("Card unavailable for this player.")
 
                 left, right = st.columns(2)
 
