@@ -4,7 +4,9 @@
 
 ## What this project is
 
-A public, fan/creator-facing **NWSL roster + cap intelligence** web app. It turns messy public soccer data into **ranked, plain-English** answers about player value and (later) cap fit. It is a *designed product with an opinion*, not a stats table.
+A public, fan/creator-facing **NWSL player-value** web app. It turns messy public soccer data into **ranked, plain-English** answers about which players are over- and undervalued. It is a *designed product with an opinion*, not a stats table.
+
+**Scope — read this before describing the project anywhere:** the app analyses **on-pitch value only**. There is no salary, contract, or cap-space functionality anywhere in the codebase; the Scout agent is explicitly instructed to refuse those filters. Cap/roster-fit analysis is a *future ambition* (see Build phases), so do not describe this as a "cap intelligence" tool in the README, the UI, a demo, or a pitch.
 
 Full strategy + build plan lives one folder up: `../NWSL_Project_Concept_and_Build_Plan.md`. Read it if you need the "why."
 
@@ -78,7 +80,7 @@ The agent must: call `describe_capabilities` when unsure of available positions/
 - **FBref/Opta** via `soccerdata` — **down-weight this.** Redistribution is NOT allowed, and Opta terminated FBref's advanced feed in Jan 2026, so it's unstable. Use only for basic current-season cross-checks, never republish.
 - **Wikidata** via SPARQL (`https://query.wikidata.org/sparql`) — free, no API key, CC0 license. Used for player birthdates only. Query: all female footballers (P106=Q937857, P21=Q6581072) with P569 (birthdate). ~86% NWSL name-match coverage. 30-day cache TTL. Manual overrides in `data/birthdates_manual.csv`. Age is computed season-aware: today for the current season, Dec 31 of season year for past seasons.
 - **Wikipedia** via `requests` + BeautifulSoup — used for validation only: NWSL Best XI (`/wiki/NWSL_Best_XI`), awards (`/wiki/NWSL_Awards`), and per-season standings (`/wiki/20XX_NWSL_season`). Public domain. SSL verification bypassed on Windows (urllib3 warning suppressed). Cache: parquet files, no TTL (refresh=True to re-pull).
-- **NWSLPA salary releases** — for the later cap features. Verify granularity before relying on it.
+- **NWSLPA salary releases** — **NOT integrated. No salary data exists in this project.** Listed only as a candidate source if cap features are ever built; verify granularity before relying on it.
 - If we ever expose a public dataset/API (the "#3" platform play), it may ONLY use openly-licensed slices (StatsBomb open data, ASA where permitted, Wikidata CC0) — never Opta-derived data.
 
 ## Value score validation methodology

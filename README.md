@@ -1,6 +1,8 @@
 # NWSL RosterLab
 
-A public NWSL roster & cap intelligence app — ranked, plain-English player-value insights built on public soccer data.
+A public NWSL **player-value** app — ranked, plain-English insights into which players are over- and undervalued, built on public soccer data.
+
+> **Scope note:** this analyses *on-pitch value only*. There is no salary, contract, or cap-space functionality — that is a roadmap ambition, not a feature. See [Non-goals](CLAUDE.md#non-goals-do-not-build-for-mvp).
 
 ## Quick start
 ```bash
