@@ -29,6 +29,7 @@ from src.analysis.movement import (
 from src.analysis.newcomers import (
     build_historical_player_ids, identify_newcomers, select_newcomer_watch_xi,
 )
+from src.analysis.season import load_season_value_table, IN_SEASON_YEAR
 from src.share.card import render_player_card, render_leaderboard_card
 from src.explain.insight import one_line_insight
 from src.data.sources import (
@@ -111,19 +112,13 @@ def load_2026_table(min_minutes: int, snapshot_date: str) -> pd.DataFrame:
 
 
 def _season_value_table(min_minutes: int, season: str) -> pd.DataFrame:
-    """Single source of truth for a season's value table so the Rankings list,
-    the player cards and the LLM insights all agree on the same numbers.
+    """Season-aware value table for player cards and LLM insights.
 
-    2026 uses the latest stabilized snapshot (identical to what load_2026_table
-    feeds the list); completed seasons use the cached ASA pull. Kept uncached and
-    cheap for 2026 (reads a parquet + stabilizes) to avoid nesting st.cache_data
-    calls; the non-2026 branch reuses the already-cached load_value_table."""
-    if season == "2026":
-        snaps = list_snapshots("2026")
-        if not snaps:
-            return pd.DataFrame()
-        vt_raw = load_snapshot(snaps[-1])
-        return apply_stabilization(vt_raw[vt_raw["minutes_played"] >= min_minutes].copy(), K=300)
+    Delegates to src.analysis.season so the UI, the cards and the Scout agent all
+    quote identical numbers (2026 = latest stabilized snapshot). Completed seasons
+    still go through the Streamlit-cached loader to avoid a redundant rebuild."""
+    if season == IN_SEASON_YEAR:
+        return load_season_value_table(season, min_minutes=min_minutes)
     return load_value_table(min_minutes, season)
 
 

@@ -44,7 +44,17 @@ def describe_capabilities() -> dict:
     """
     return {
         "positions": ["ST", "W", "AM", "CM", "DM", "FB", "CB"],
-        "seasons": ["2025", "2024", "2023", "2022", "2021", "2020", "2019"],
+        "seasons": ["2026", "2025", "2024", "2023", "2022", "2021", "2020", "2019"],
+        "in_season_year": {
+            "season": "2026",
+            "status": "IN PROGRESS — partial season, not final.",
+            "note": (
+                "2026 numbers come from the latest weekly snapshot and are statistically "
+                "stabilized (shrunk toward the position average based on minutes played) so "
+                "small samples do not dominate. Always tell the user that 2026 is a partial "
+                "season and the figures are directional. 2025 is the most recent COMPLETE season."
+            ),
+        },
         "sort_metrics": [
             "value_score",
             "weighted_ga_p90",
@@ -97,22 +107,11 @@ def query_players(
     Returns an empty list (with an error key) if the position is invalid.
     Age filters silently exclude players whose age is unknown (~14% of the dataset).
     """
-    from src.data.sources import (
-        fetch_player_goals_added,
-        fetch_player_xgoals,
-        fetch_players,
-        fetch_teams,
-        fetch_player_birthdates,
-    )
-    from src.analysis.ranking import build_player_value_table, rank_by_position
+    from src.analysis.season import load_season_value_table
+    from src.analysis.ranking import rank_by_position
 
     try:
-        ga = fetch_player_goals_added(season_name=season)
-        xg = fetch_player_xgoals(season_name=season)
-        pl = fetch_players()
-        tm = fetch_teams()
-        bd = fetch_player_birthdates()
-        full = build_player_value_table(ga, xg, pl, tm, birthdates=bd, min_minutes=min_minutes, season=season)
+        full = load_season_value_table(season, min_minutes=min_minutes)
     except Exception as e:
         return [{"error": f"data load failed: {e}"}]
 
@@ -154,22 +153,11 @@ def get_player_detail(
     Includes _rank, _cohort_size, and position averages for the model to cite.
     Returns {"error": "..."} if the player is not found.
     """
-    from src.data.sources import (
-        fetch_player_goals_added,
-        fetch_player_xgoals,
-        fetch_players,
-        fetch_teams,
-        fetch_player_birthdates,
-    )
-    from src.analysis.ranking import build_player_value_table, rank_by_position
+    from src.analysis.season import load_season_value_table
+    from src.analysis.ranking import rank_by_position
 
     try:
-        ga = fetch_player_goals_added(season_name=season)
-        xg = fetch_player_xgoals(season_name=season)
-        pl = fetch_players()
-        tm = fetch_teams()
-        bd = fetch_player_birthdates()
-        full = build_player_value_table(ga, xg, pl, tm, birthdates=bd, min_minutes=min_minutes, season=season)
+        full = load_season_value_table(season, min_minutes=min_minutes)
     except Exception as e:
         return {"error": f"data load failed: {e}"}
 

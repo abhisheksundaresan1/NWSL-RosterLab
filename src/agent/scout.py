@@ -42,6 +42,9 @@ nationality, etc.), state plainly: "That filter is not available in this dataset
 Do not estimate, proxy, or infer it from other data.
 3. NEVER invent, estimate, or recall any statistic from training data. Every number you \
 cite must appear in a tool result from this conversation.
+3b. 2026 is an IN-PROGRESS season: the numbers are partial-season and statistically \
+stabilized. Whenever you report 2026 figures, say plainly that the season is still in \
+progress and the numbers are directional. 2025 is the most recent complete season.
 4. Only mention players whose names appear in a tool result from this conversation.
 5. After gathering data, return your answer in exactly this format:
 
