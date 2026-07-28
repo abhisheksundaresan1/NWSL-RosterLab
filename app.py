@@ -168,8 +168,10 @@ def get_insight(player_name: str, season: str, min_minutes: int, position: str) 
 
 @st.cache_data(show_spinner=False, ttl=3600)
 def _cached_player_card(player_name: str, season: str, min_minutes: int, position: str,
-                        card_version: int = 5) -> bytes:
-    """Cache rendered PNG bytes. card_version busts stale cached cards after layout changes."""
+                        card_version: int = 6) -> bytes:
+    """Cache rendered PNG bytes. card_version busts stale cached cards after
+    layout changes — bump it whenever src/share/card.py changes visually.
+    (v6 = "Broadcast Dossier" redesign.)"""
     full   = _season_value_table(min_minutes, season)
     cohort = rank_by_position(full, position).copy()
     cohort["_rank"] = range(1, len(cohort) + 1)
@@ -486,7 +488,9 @@ with the weights or want to compare across positions.
                 # analyst line (~10s each). Generating it for every player on load
                 # made the page take minutes, so it's on demand — only the player
                 # whose button is clicked pays the cost (and it's cached after).
-                _card_key = f"cardpng__{row['player_name']}__{season}__{selected_pos}__{min_minutes}"
+                # _v6 matches card_version: without it, PNG bytes rendered
+                # earlier in this browser session survive a card redesign.
+                _card_key = f"cardpng__{row['player_name']}__{season}__{selected_pos}__{min_minutes}_v6"
                 if _card_key not in st.session_state:
                     if st.button("Prepare shareable card", key=f"prep__{_card_key}"):
                         with st.spinner("Rendering card (incl. analyst line)…"):
