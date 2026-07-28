@@ -15,6 +15,7 @@ from __future__ import annotations
 import io
 import re
 import textwrap
+from pathlib import Path
 from typing import Optional
 
 import matplotlib
@@ -105,6 +106,124 @@ def _get_font(size: int) -> ImageFont.FreeTypeFont:
 def _get_bold_font(size: int) -> ImageFont.FreeTypeFont:
     path = fm.findfont(fm.FontProperties(family="DejaVu Sans", weight="bold"))
     return ImageFont.truetype(path, size)
+
+
+# ---------------------------------------------------------------------------
+# "Broadcast Dossier" type system  (see assets/CARD_DESIGN_PHILOSOPHY.md)
+#
+# Three roles, three faces — bundled in assets/fonts so Linux (Streamlit Cloud)
+# renders identically to Windows. All OFL-licensed; licences ship alongside.
+#   display : Big Shoulders  — condensed, athletic. Names and hero figures.
+#   text    : Work Sans      — grotesque. Body copy and labels.
+#   mono    : Geist Mono     — tabular figures and micro-labels.
+# Falls back to DejaVu if the directory is ever missing, so the card can never
+# hard-fail on a font lookup.
+# ---------------------------------------------------------------------------
+
+_FONT_DIR = Path(__file__).resolve().parents[2] / "assets" / "fonts"
+
+
+def _load(name: str, size: int, fallback_bold: bool = False) -> ImageFont.FreeTypeFont:
+    path = _FONT_DIR / name
+    if path.exists():
+        return ImageFont.truetype(str(path), size)
+    return _get_bold_font(size) if fallback_bold else _get_font(size)
+
+
+def _f_display(size: int) -> ImageFont.FreeTypeFont:
+    return _load("BigShoulders-Bold.ttf", size, fallback_bold=True)
+
+
+def _f_text(size: int) -> ImageFont.FreeTypeFont:
+    return _load("WorkSans-Regular.ttf", size)
+
+
+def _f_text_bold(size: int) -> ImageFont.FreeTypeFont:
+    return _load("WorkSans-Bold.ttf", size, fallback_bold=True)
+
+
+def _f_mono(size: int) -> ImageFont.FreeTypeFont:
+    return _load("GeistMono-Regular.ttf", size)
+
+
+# --- Palette ---------------------------------------------------------------
+# One accent only (the club colour). Everything else is a three-step neutral
+# ladder. No second hue: a below-average value is signalled by direction, not
+# by alarm — hence no red anywhere.
+INK          = (8,  16,  24, 255)    # near-black navy base
+TEXT_1       = (255, 255, 255, 255)  # primary
+TEXT_2       = (150, 170, 190, 255)  # secondary
+TEXT_3       = (95, 118, 140, 255)   # tertiary / micro-labels
+RULE         = (34, 50, 66, 255)     # hairline
+BAR_NEG      = (68, 88, 108, 255)    # below zero — muted, never red
+AVG_TICK     = (128, 150, 172, 255)  # positional-average marker
+
+MARGIN = 72
+
+
+def _relative_luminance(rgb) -> float:
+    def _lin(c):
+        c = c / 255
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+    r, g, b = (_lin(v) for v in rgb[:3])
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _contrast(a, b) -> float:
+    la, lb = _relative_luminance(a), _relative_luminance(b)
+    hi, lo = max(la, lb), min(la, lb)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _display_accent(hex_color: str, target: float = 4.5) -> tuple:
+    """Return the club colour raised to a legible tint against the card base.
+
+    Eleven of sixteen NWSL brand colours are darker than this card's near-black
+    ground — six of them are effectively invisible on it. Rather than abandon
+    club identity, we hold hue and saturation and lift ONLY lightness until the
+    colour clears a readable contrast ratio. Portland still reads red, Orlando
+    still reads purple; both become legible. This is standard practice for
+    broadcast graphics over dark backgrounds.
+    """
+    import colorsys
+    rgb = _hex_rgb(hex_color)
+    if _contrast(rgb, INK[:3]) >= target:
+        return rgb + (255,)
+    h, l, s = colorsys.rgb_to_hls(*[c / 255 for c in rgb])
+    # Achromatic brands (Gotham's black/white) carry no meaningful hue — the
+    # residual tint in a near-black is noise, and amplifying it invents a colour
+    # the club does not own. Resolve those to a bright neutral instead.
+    if s < 0.18:
+        return (232, 238, 245, 255)
+    s = max(s, 0.45)                      # keep it chromatic, never washed grey
+    for step in range(1, 101):
+        cand_l = min(0.92, l + step * 0.01)
+        r, g, b = colorsys.hls_to_rgb(h, cand_l, s)
+        cand = (int(r * 255), int(g * 255), int(b * 255))
+        if _contrast(cand, INK[:3]) >= target:
+            return cand + (255,)
+    return (235, 240, 245, 255)           # last resort: near-white
+
+
+def _tracked(draw, xy, text, font, fill, tracking: int = 0):
+    """Draw text with letter-spacing (PIL has no native tracking).
+
+    Used for uppercase micro-labels, which need air to read as structural
+    headings rather than shouting. Returns the x advance."""
+    x, y = xy
+    for ch in text:
+        draw.text((x, y), ch, font=font, fill=fill)
+        x += font.getlength(ch) + tracking
+    return x - xy[0]
+
+
+def _tracked_width(text: str, font, tracking: int = 0) -> float:
+    return sum(font.getlength(c) for c in text) + tracking * max(len(text) - 1, 0)
+
+
+def _rule(draw, y: int, x0: int = MARGIN, x1: int = CARD_W - MARGIN, fill=RULE):
+    """A hairline. Separation is done with rules and silence, never boxes."""
+    draw.line([(x0, y), (x1, y)], fill=fill, width=1)
 
 
 # ---------------------------------------------------------------------------
@@ -277,6 +396,73 @@ def _draw_footer(draw: ImageDraw.ImageDraw,
     draw.text((x, y), text, font=font, fill=(160, 190, 210, 255))
 
 
+def _draw_action_bars(draw, row: dict, cohort: pd.DataFrame,
+                      y0: int, accent: tuple, row_h: int = 46) -> int:
+    """Draw the g+ breakdown as direct-labelled bars. Returns the bottom y.
+
+    Data is drawn, not plotted: no axes, no ticks, no gridlines, no legend box.
+    Each bar is labelled at its head (action) and tail (value) so it reads like
+    a sentence, and the positional average is a single hairline tick for anyone
+    who looks for it.
+    """
+    cols = ["ga_shooting_p90", "ga_dribbling_p90", "ga_passing_p90",
+            "ga_receiving_p90", "ga_interrupting_p90", "ga_fouling_p90"]
+
+    vals = [float(row.get(c, 0.0)) for c in cols]
+    avgs = [float(cohort[c].mean()) if c in cohort.columns else 0.0 for c in cols]
+    labels = [ACTION_DISPLAY.get(c, c.replace("ga_", "").replace("_p90", "").title()) for c in cols]
+
+    # Sort strongest-first: the eye should meet her best trait immediately.
+    order = sorted(range(len(cols)), key=lambda i: vals[i], reverse=True)
+
+    LABEL_R = MARGIN + 216          # labels right-align here
+    BAR_X0  = LABEL_R + 28
+    BAR_X1  = CARD_W - MARGIN - 84  # leave a gutter for the value text
+
+    lo = min(0.0, min(vals), min(avgs))
+    hi = max(0.0, max(vals), max(avgs))
+    span = (hi - lo) or 1.0
+    zero_x = BAR_X0 + (0.0 - lo) / span * (BAR_X1 - BAR_X0)
+
+    lab_font = _f_text(24)
+    val_font = _f_mono(21)
+    BAR_H = 20
+
+    y = y0
+    for i in order:
+        v, a, lab = vals[i], avgs[i], labels[i]
+        cy = y + row_h // 2
+
+        # Action label, right-aligned into the bar column
+        lw = lab_font.getlength(lab)
+        draw.text((LABEL_R - lw, cy - 15), lab, font=lab_font, fill=TEXT_2)
+
+        # The bar itself
+        vx = BAR_X0 + (v - lo) / span * (BAR_X1 - BAR_X0)
+        x_a, x_b = (zero_x, vx) if v >= 0 else (vx, zero_x)
+        if abs(x_b - x_a) < 2:                      # keep near-zero visible
+            x_b = x_a + 2
+        draw.rectangle([(x_a, cy - BAR_H // 2), (x_b, cy + BAR_H // 2)],
+                       fill=accent if v >= 0 else BAR_NEG)
+
+        # Positional-average tick
+        ax = BAR_X0 + (a - lo) / span * (BAR_X1 - BAR_X0)
+        draw.rectangle([(ax - 1, cy - BAR_H // 2 - 6), (ax + 1, cy + BAR_H // 2 + 6)],
+                       fill=AVG_TICK)
+
+        # Value, tail of the bar. Values that round to nothing print as a plain
+        # 0.00 — a signed "-0.00" is a rendering artefact, not a measurement.
+        vtxt = "0.00" if abs(v) < 0.005 else f"{v:+.2f}"
+        draw.text((BAR_X1 + 16, cy - 13), vtxt, font=val_font,
+                  fill=TEXT_1 if v >= 0 else TEXT_3)
+        y += row_h
+
+    # Zero baseline, drawn last so it sits above the bars
+    draw.line([(zero_x, y0 - 2), (zero_x, y - row_h + row_h - 2)],
+              fill=(90, 112, 134, 255), width=1)
+    return y
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -307,7 +493,10 @@ def render_player_card(
     rank       = int(row["_rank"])
     n_cohort   = len(cohort)
     pct        = (1 - (rank - 1) / max(n_cohort - 1, 1)) * 100
-    age_str    = f"  ·  Age {int(row['age'])}" if row.get("age") else ""
+    # NaN is truthy, so a bare `if row.get("age")` sends NaN into int() and
+    # raises — ~10% of players have no Wikidata birthdate match.
+    _age = row.get("age")
+    age_str = f"  ·  Age {int(_age)}" if pd.notna(_age) else ""
     hook       = headline_hook(row, cohort, season)
 
     # Fallback insight (2-3 sentences from numbers; used when LLM unavailable)
@@ -324,11 +513,13 @@ def render_player_card(
         avg_ga    = float(cohort["goals_added_p90"].mean())
         xga_p90   = float(row.get("xga_p90", 0))
         avg_xga   = float(cohort["xga_p90"].mean())
-        pct_label = f"top {100 - round(pct):.0f}% of" if rank > 1 else "#1 among"
+        standing = (
+            "the best in the league at her position" if rank == 1
+            else f"in the top {100 - round(pct):.0f}% of all {pos_label}s"
+        )
         insight_text = (
             f"Ranks #{rank} of {n_cohort} {pos_label}s on g+/90 "
-            f"({ga_p90:.2f} vs. position avg {avg_ga:.2f}), "
-            f"placing her in the {pct_label} all {pos_label}s in the league. "
+            f"({ga_p90:.2f} vs. position avg {avg_ga:.2f}), placing her {standing}. "
             f"Her strongest action type is {top_label.lower()} ({top_val:+.2f} g+), "
             f"while {bot_label.lower()} is her weakest ({bot_val:+.2f} g+). "
             f"xG+xA/90 of {xga_p90:.2f} compares to a position average of {avg_xga:.2f}."
@@ -337,39 +528,26 @@ def render_player_card(
     hook         = _clean_text(hook)
     insight_text = _clean_text(insight_text)
 
-    # Layout constants
-    FOOTER_Y   = 1270
-    FOOTER_H   = 80       # 1270–1350
-    STAT_H     = 52       # stat strip height
-    STAT_Y     = FOOTER_Y - STAT_H   # 1218
-    VERDICT_H  = 62       # bold verdict line zone
-    VERDICT_Y  = STAT_Y - VERDICT_H  # 1156
-    TAKE_Y     = 760
-    TAKE_W     = CARD_W - 108        # text column width (54px margin each side)
-    TAKE_MAX_H = VERDICT_Y - TAKE_Y - 20   # scout text zone (376px)
-
-    # Auto-fit scout take: start at font size 32, shrink until text fits the zone
+    # Auto-fit the scout take to whatever vertical space the layout leaves.
+    # Floor of 22px: below that it dissolves at feed size, which the philosophy
+    # forbids — so we trim sentences rather than shrink further.
     def _fit_take(text: str, max_w_px: int, max_h_px: int) -> tuple[ImageFont.FreeTypeFont, str]:
         """Return (font, wrapped_text) that fits within max_w_px x max_h_px."""
-        # Use a temporary draw surface to measure
         _tmp = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
-        for size in range(32, 17, -1):
-            font = _get_font(size)
-            # Estimate chars-per-line from pixel width
-            avg_char_w = font.getlength("n")
-            chars_per_line = max(20, int(max_w_px / avg_char_w))
-            wrapped = textwrap.fill(text, width=chars_per_line)
-            bb = _tmp.textbbox((0, 0), wrapped, font=font, spacing=8)
-            if (bb[3] - bb[1]) <= max_h_px:
-                return font, wrapped
-        # Last resort: hard-truncate at minimum font
-        font = _get_font(18)
-        avg_char_w = font.getlength("n")
-        chars_per_line = max(20, int(max_w_px / avg_char_w))
-        return font, textwrap.fill(text, width=chars_per_line)
+        for n_sent in (3, 2):
+            candidate = _trim_sentences(text, max_sentences=n_sent)
+            for size in range(30, 21, -1):
+                font = _f_text(size)
+                chars_per_line = max(20, int(max_w_px / font.getlength("n")))
+                wrapped = textwrap.fill(candidate, width=chars_per_line)
+                bb = _tmp.textbbox((0, 0), wrapped, font=font, spacing=10)
+                if (bb[3] - bb[1]) <= max_h_px:
+                    return font, wrapped
+        font = _f_text(22)
+        chars_per_line = max(20, int(max_w_px / font.getlength("n")))
+        return font, textwrap.fill(_trim_sentences(text, max_sentences=2), width=chars_per_line)
 
     insight_trimmed = _trim_sentences(insight_text, max_sentences=3)
-    take_font, take_wrapped = _fit_take(insight_trimmed, TAKE_W, TAKE_MAX_H)
 
     # Stat strip text
     avg_wga  = float(cohort["weighted_ga_p90"].mean())
@@ -382,77 +560,126 @@ def render_player_card(
         f"   xG+xA/90: {float(row.get('xga_p90', 0)):.2f} (pos avg {avg_xga:.2f})"
     )
 
-    # Canvas
-    img  = Image.new("RGBA", (CARD_W, CARD_H), BG_COLOR)
+    # =======================================================================
+    # "Broadcast Dossier" layout — see assets/CARD_DESIGN_PHILOSOPHY.md
+    # Zones are anchored to BOTH edges so slack is distributed, never pooled
+    # into a dead gap at the bottom.
+    # =======================================================================
+    accent = _display_accent(team_color)
+    img  = Image.new("RGBA", (CARD_W, CARD_H), INK)
     draw = ImageDraw.Draw(img)
 
-    # --- Zone 1: Header (0-220) ---
-    _draw_header(draw, img, team_color, hook, header_h=220)
+    # Accent rail — the club colour states itself once, at the edge.
+    draw.rectangle([(0, 0), (CARD_W, 7)], fill=accent)
 
-    # --- Zone 2: Identity (220-340) ---
-    name_font = _get_bold_font(48)
-    draw.text((54, 232), _clean_text(str(row.get("player_name", ""))),
-              font=name_font, fill=TEXT_PRIMARY)
-    sub_font = _get_font(28)
-    sub_text = _clean_text(f"{row.get('team_name', '')}  ·  {pos_label}{age_str}  ·  {season}")
-    draw.text((54, 292), sub_text, font=sub_font, fill=TEXT_SECONDARY)
+    # --- Micro header: provenance left, standing right ---------------------
+    micro = _f_mono(19)
+    _tracked(draw, (MARGIN, 52), f"NWSL {season}".upper(), micro, TEXT_3, tracking=3)
+    standing = f"#{rank} OF {n_cohort} {pos_label.upper()}S"
+    sw = _tracked_width(standing, micro, 3)
+    _tracked(draw, (CARD_W - MARGIN - sw, 52), standing, micro, TEXT_3, tracking=3)
+    _rule(draw, 92)
 
-    # --- Zone 3: Value banner (340-440) ---
-    draw.rectangle([(0, 340), (CARD_W, 440)], fill=(20, 45, 65, 255))
-    val_font  = _get_bold_font(44)
-    rank_font = _get_font(30)
+    # --- Identity: the name is the headline ---------------------------------
+    name = _clean_text(str(row.get("player_name", "")))
+    n_size = 104
+    while n_size > 54 and _f_display(n_size).getlength(name) > CARD_W - 2 * MARGIN:
+        n_size -= 2
+    name_font = _f_display(n_size)
+    draw.text((MARGIN, 118), name, font=name_font, fill=TEXT_1)
+
+    # Big Shoulders carries a tall ascent, so the subtitle needs real air
+    # beneath the name rather than the optical minimum.
+    sub = _clean_text(f"{row.get('team_name', '')}  ·  {pos_label}{age_str}")
+    draw.text((MARGIN, 118 + n_size + 22), sub, font=_f_text(26), fill=TEXT_2)
+
+    # The claim, in the club's colour.
+    hook_y = 118 + n_size + 74
+    h_size = 40
+    while h_size > 26 and _f_display(h_size).getlength(hook.upper()) > CARD_W - 2 * MARGIN:
+        h_size -= 1
+    draw.text((MARGIN, hook_y), hook.upper(), font=_f_display(h_size), fill=accent)
+    _rule(draw, hook_y + h_size + 26)
+
+    # --- Hero figure --------------------------------------------------------
     vs = float(row.get("value_score", 0))
-    label_font = _get_font(20)
-    draw.text((54, 348), "Value score", font=label_font, fill=TEXT_SECONDARY)
-    draw.text((54, 368), f"{vs:+.2f}", font=val_font, fill=(255, 255, 180, 255))
-    # Omit percentile for rank==1 (would show "Top 0%")
-    if rank == 1:
-        rank_text = f"#{rank} of {n_cohort} {pos_label}s"
+    hero_top = hook_y + h_size + 56
+    _tracked(draw, (MARGIN, hero_top), "VALUE SCORE", micro, TEXT_3, tracking=3)
+
+    hero_font = _f_display(132)
+    hero_txt  = f"{vs:+.2f}"
+    draw.text((MARGIN, hero_top + 24), hero_txt, font=hero_font, fill=TEXT_1)
+    hero_w = hero_font.getlength(hero_txt)
+
+    # Context sits on the hero's baseline, subordinate in scale.
+    ctx_x = MARGIN + hero_w + 30
+    ctx_y = hero_top + 24 + 132 - 62
+    draw.text((ctx_x, ctx_y), "0.00 = positional average",
+              font=_f_text(23), fill=TEXT_3)
+    if rank > 1:
+        draw.text((ctx_x, ctx_y + 30), f"Top {100 - round(pct)}% of {pos_label.lower()}s",
+                  font=_f_text(23), fill=TEXT_2)
     else:
-        rank_text = f"#{rank} of {n_cohort} {pos_label}s  ·  Top {100 - round(pct)}%"
-    draw.text((220, 378), rank_text, font=rank_font, fill=TEXT_SECONDARY)
+        draw.text((ctx_x, ctx_y + 30), f"Best {pos_label.lower()} in the league",
+                  font=_f_text(23), fill=TEXT_2)
 
-    # --- Zone 4: Action chart (440-760) ---
-    chart_img = _action_bar_chart(row, cohort)
-    chart_img = chart_img.resize((CARD_W - 80, 300), Image.LANCZOS)
-    img.paste(chart_img, (40, 448))
+    chart_label_y = hero_top + 24 + 132 + 30
+    _rule(draw, chart_label_y - 14)
 
-    # --- Zone 5: Scout take (760-VERDICT_Y) ---
-    draw.rectangle([(0, TAKE_Y), (CARD_W, VERDICT_Y)], fill=(16, 36, 52, 255))
-    draw.text((54, TAKE_Y + 20), take_wrapped, font=take_font,
-              fill=TEXT_PRIMARY, spacing=8)
+    # --- Evidence -----------------------------------------------------------
+    _tracked(draw, (MARGIN, chart_label_y + 14), "WHAT DRIVES HER VALUE",
+             micro, TEXT_3, tracking=3)
+    unit = "g+ PER 90"
+    uw = _tracked_width(unit, micro, 3)
+    _tracked(draw, (CARD_W - MARGIN - uw, chart_label_y + 14), unit, micro, TEXT_3, tracking=3)
 
-    # --- Zone 5b: Verdict line (VERDICT_Y-STAT_Y) ---
-    draw.rectangle([(0, VERDICT_Y), (CARD_W, STAT_Y)], fill=(20, 45, 65, 255))
-    draw.line([(0, VERDICT_Y), (CARD_W, VERDICT_Y)], fill=(50, 90, 130, 255), width=1)
+    bars_top = chart_label_y + 52
+    bars_bottom = _draw_action_bars(draw, row, cohort, bars_top, accent)
+
+    # Average-marker key, stated once and quietly.
+    key_y = bars_bottom + 10
+    draw.rectangle([(MARGIN, key_y + 6), (MARGIN + 2, key_y + 22)], fill=AVG_TICK)
+    draw.text((MARGIN + 14, key_y + 4), "positional average",
+              font=_f_text(20), fill=TEXT_3)
+
+    # --- Footer block, anchored to the bottom edge --------------------------
+    BRAND_Y   = CARD_H - 62
+    STATS_Y   = BRAND_Y - 46
+    VERDICT_Y2 = STATS_Y - 56
+    _rule(draw, VERDICT_Y2 - 30)
+
     verdict_text = _clean_text(_verdict(row, cohort, pos_label))
-    verdict_font = _get_bold_font(30)
-    vbb = draw.textbbox((0, 0), verdict_text, font=verdict_font)
-    v_x = (CARD_W - (vbb[2] - vbb[0])) // 2
-    v_y = VERDICT_Y + (VERDICT_H - (vbb[3] - vbb[1])) // 2
-    draw.text((v_x, v_y), verdict_text, font=verdict_font,
-              fill=(255, 230, 130, 255))
+    v_size = 34
+    while v_size > 22 and _f_display(v_size).getlength(verdict_text.upper()) > CARD_W - 2 * MARGIN:
+        v_size -= 1
+    draw.text((MARGIN, VERDICT_Y2), verdict_text.upper(),
+              font=_f_display(v_size), fill=accent)
 
-    # --- Zone 5c: Stat strip (STAT_Y-FOOTER_Y) ---
-    draw.rectangle([(0, STAT_Y), (CARD_W, FOOTER_Y)], fill=(25, 55, 80, 255))
-    # Separator line at top of stat strip
-    draw.line([(0, STAT_Y), (CARD_W, STAT_Y)], fill=(60, 100, 140, 255), width=1)
-    stat_font = _get_font(21)
-    bb = draw.textbbox((0, 0), stat_text, font=stat_font)
-    # If text is wider than card, shorten it
-    if bb[2] - bb[0] > CARD_W - 108:
-        stat_text = (
-            f"Min: {mins_int:,} (~{matches} matches)"
-            f"   Wtd g+/90: {float(row.get('weighted_ga_p90', 0)):.2f} (avg {avg_wga:.2f})"
-            f"   xG+xA/90: {float(row.get('xga_p90', 0)):.2f} (avg {avg_xga:.2f})"
-        )
-        bb = draw.textbbox((0, 0), stat_text, font=stat_font)
-    stat_x = max(54, (CARD_W - (bb[2] - bb[0])) // 2)
-    stat_y = STAT_Y + (STAT_H - (bb[3] - bb[1])) // 2
-    draw.text((stat_x, stat_y), stat_text, font=stat_font, fill=(160, 200, 230, 255))
+    stat_font = _f_mono(20)
+    stat_line = (
+        f"{mins_int:,} MIN  ~{matches} MATCHES     "
+        f"WTD g+/90 {float(row.get('weighted_ga_p90', 0)):.2f} (AVG {avg_wga:.2f})     "
+        f"xG+xA/90 {float(row.get('xga_p90', 0)):.2f} (AVG {avg_xga:.2f})"
+    )
+    while stat_font.getlength(stat_line) > CARD_W - 2 * MARGIN and stat_font.size > 14:
+        stat_font = _f_mono(stat_font.size - 1)
+    draw.text((MARGIN, STATS_Y), stat_line, font=stat_font, fill=TEXT_2)
 
-    # --- Zone 6: Footer flush at bottom (1270-1350) ---
-    _draw_footer(draw, footer_y=FOOTER_Y, footer_h=FOOTER_H)
+    _rule(draw, BRAND_Y - 16)
+    brand_font = _f_display(28)
+    draw.text((MARGIN, BRAND_Y), "NWSL ROSTERLAB", font=brand_font, fill=TEXT_1)
+    url_font = _f_mono(21)
+    uw2 = url_font.getlength(APP_URL)
+    draw.text((CARD_W - MARGIN - uw2, BRAND_Y + 4), APP_URL, font=url_font, fill=TEXT_3)
+
+    # --- Interpretation: centred in the space the layout actually left ------
+    take_top    = key_y + 34
+    take_bottom = VERDICT_Y2 - 44
+    zone_h = take_bottom - take_top
+    take_font, take_wrapped = _fit_take(insight_trimmed, CARD_W - 2 * MARGIN, zone_h)
+    tb = draw.textbbox((0, 0), take_wrapped, font=take_font, spacing=10)
+    draw.text((MARGIN, take_top + max(0, (zone_h - (tb[3] - tb[1])) // 2)),
+              take_wrapped, font=take_font, fill=(214, 226, 238, 255), spacing=10)
 
     # Serialize
     buf = io.BytesIO()
