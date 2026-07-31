@@ -1,0 +1,75 @@
+# Theme + client config for NWSL RosterLab.
+#
+# Design tokens mirror src/share/card.py so the app and the shareable cards read
+# as one product. Fonts are the same OFL faces the cards render with, served
+# from static/fonts (enableStaticServing below).
+
+[server]
+# Required so the browser can fetch static/fonts/*.ttf for the fontFaces below.
+enableStaticServing = true
+
+[client]
+# Hides the Streamlit Cloud toolbar (Fork / GitHub badge, hamburger menu)
+# without CSS hacks.
+toolbarMode = "minimal"
+# NOTE: do NOT set showSidebarNavigation = false here. It suppresses the
+# st.navigation widget itself — including the top nav — leaving the app with no
+# navigation at all. The sidebar is already gone because no page writes to it.
+
+[theme]
+base = "dark"
+
+# --- Surfaces ---------------------------------------------------------------
+backgroundColor          = "#081018"   # INK — same near-black as the card base
+secondaryBackgroundColor = "#0F1B27"   # raised surface (expanders, inputs)
+borderColor              = "#223242"   # RULE — hairlines
+dataframeHeaderBackgroundColor = "#0F1B27"
+
+# --- Text -------------------------------------------------------------------
+textColor    = "#FFFFFF"               # TEXT_1
+linkColor    = "#FFC24B"
+
+# --- Accent -----------------------------------------------------------------
+# One accent for value/score emphasis. Team colours are applied per-element in
+# CSS via card.py's _display_accent(), never here.
+primaryColor = "#FFC24B"
+
+# --- Type -------------------------------------------------------------------
+font        = "Work Sans"
+headingFont = "Big Shoulders"
+codeFont    = "Geist Mono"
+baseFontSize = 16
+
+# Chart palette: accent first, then muted neutrals, so charts inherit the
+# system rather than Streamlit's defaults.
+chartCategoricalColors = ["#FFC24B", "#5A8CC4", "#8096AC", "#C58B5A", "#6FA88C", "#9B7FB8"]
+
+[[theme.fontFaces]]
+family = "Work Sans"
+url    = "app/static/fonts/WorkSans-Regular.ttf"
+weight = 400
+
+[[theme.fontFaces]]
+family = "Work Sans"
+url    = "app/static/fonts/WorkSans-Bold.ttf"
+weight = 700
+
+[[theme.fontFaces]]
+family = "Big Shoulders"
+url    = "app/static/fonts/BigShoulders-Regular.ttf"
+weight = 400
+
+[[theme.fontFaces]]
+family = "Big Shoulders"
+url    = "app/static/fonts/BigShoulders-Bold.ttf"
+weight = 700
+
+[[theme.fontFaces]]
+family = "Geist Mono"
+url    = "app/static/fonts/GeistMono-Regular.ttf"
+weight = 400
+
+[[theme.fontFaces]]
+family = "Geist Mono"
+url    = "app/static/fonts/GeistMono-Bold.ttf"
+weight = 700
