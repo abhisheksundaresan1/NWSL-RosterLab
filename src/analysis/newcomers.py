@@ -92,13 +92,22 @@ def _college_value_map() -> dict[str, float]:
         return {}
 
 
-def select_newcomer_watch_xi(newcomer_vt: pd.DataFrame) -> list[dict]:
+# A newcomer must be at least positionally average to appear. The rank window
+# alone is not enough: newcomer cohorts are small (sometimes 2-3 players at a
+# position), so "top 3" can include below-average players — and the card is
+# headlined "highest-value first-year players". An empty slot is more honest.
+MIN_VALUE_SCORE = 0.0
+
+
+def select_newcomer_watch_xi(newcomer_vt: pd.DataFrame,
+                             min_value_score: float = MIN_VALUE_SCORE) -> list[dict]:
     """One newcomer per formation slot by (stabilized) value_score.
 
-    Same top-N / top-PCT threshold + sentinel as the Undervalued XI: a slot is
-    only filled if the best available newcomer ranks within the position window;
-    otherwise a sentinel keeps a weak player off the card. Annotates each pick
-    with `college_value_percentile` when the name matches the college value table.
+    A slot is filled only if the best available newcomer clears BOTH gates:
+    the top-N / top-PCT rank window (as the Undervalued XI uses) and a value
+    floor of `min_value_score`. Otherwise the slot gets a sentinel. Annotates
+    each pick with `college_value_percentile` when the name matches the college
+    value table.
     """
     college = _college_value_map()
     picked_names: set[str] = set()
@@ -121,6 +130,8 @@ def select_newcomer_watch_xi(newcomer_vt: pd.DataFrame) -> list[dict]:
         for rank_0, (_, row) in enumerate(cohort.head(threshold).iterrows()):
             if row["player_name"] in picked_names:
                 continue
+            if float(row["value_score"]) < min_value_score:
+                continue          # below the floor — leave the slot empty
             picked = row
             rank_in_pos = rank_0 + 1
             picked_names.add(row["player_name"])

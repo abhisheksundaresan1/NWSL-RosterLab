@@ -37,7 +37,10 @@ DISPLAY_LABELS = {
 
 CANNED_SEARCHES: list[dict] = [
     {
-        "label": "Top undervalued strikers",
+        # NOT "undervalued": that word is reserved for the Undervalued XI, which
+        # means high value EXCLUDING the Best XI. This search applies no
+        # exclusion — it is simply the top strikers by value.
+        "label": "Top strikers by value",
         "icon": "⚡",
         "description": "Strikers ranked highest by position-weighted value score.",
         "kwargs": {"position": "ST", "sort_by": "value_score", "limit": 10},

@@ -133,6 +133,26 @@ _CSS = f"""
 /* the team-colour bar that opens each row */
 .rl-teambar {{ width: 4px; border-radius: 2px; height: 46px; margin-top: 6px; }}
 
+/* The per-player "Detail" expander sits inside the row container. Stripped of
+   its panel chrome and pulled up level with the row so each player reads as ONE
+   row with a quiet chevron, rather than a row plus a full-width grey bar.     */
+[class*="st-key-prow_"] [data-testid="stExpander"] {{
+    margin-top: -14px; margin-bottom: 0;
+}}
+[class*="st-key-prow_"] [data-testid="stExpander"] details {{
+    border: none !important; background: transparent !important;
+}}
+[class*="st-key-prow_"] [data-testid="stExpander"] summary {{
+    padding: 0 !important; min-height: 0;
+    font-size: 12px; color: {FG_FAINT};
+    width: max-content;            /* only as wide as the chevron + label */
+}}
+[class*="st-key-prow_"] [data-testid="stExpander"] summary:hover {{ color: {FG}; }}
+/* Expanded body gets its air back, and clears the row above it. */
+[class*="st-key-prow_"] [data-testid="stExpanderDetails"] {{
+    padding-top: 14px; padding-left: 0;
+}}
+
 /* ---- Metric grid (inside player detail) ---------------------------------- */
 .rl-metric {{
     background: {SURFACE}; border: 1px solid {LINE}; border-radius: 6px;
