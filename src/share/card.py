@@ -254,7 +254,10 @@ def headline_hook(row: dict, cohort: pd.DataFrame, season: str) -> str:
     if rank == 1:
         return f"#1 {pos} in the NWSL by Value"
     if pct >= 85 and low_min:
-        return f"Undervalued: Top {round(100 - pct)}% {pos} on limited minutes"
+        # Deliberately NOT "Undervalued": that term is reserved for the
+        # Undervalued XI (high value, omitted from the Best XI). This case is
+        # high value on low minutes, which is a different claim — underuse.
+        return f"Underused: Top {round(100 - pct)}% {pos} on limited minutes"
     if age is not None and age <= 22 and pct >= 80:
         return f"Rising: Top {round(100 - pct)}% {pos} at just {int(age)}"
     if pct >= 95:
@@ -787,13 +790,35 @@ def render_leaderboard_card(
 
 
 def _name_short(name: str, max_len: int = 14) -> str:
-    """Return 'First L.' if name exceeds max_len chars."""
+    """Return 'First L.' if name exceeds max_len chars. (Character-based; the
+    pitch card uses _fit_name below, which measures actual rendered width.)"""
     if len(name) <= max_len:
         return name
     parts = name.split()
     if len(parts) >= 2:
         return f"{parts[0]} {parts[-1][0]}."
     return name[:max_len]
+
+
+def _fit_name(name: str, font, max_w: float) -> str:
+    """Shorten a name to fit `max_w` pixels, measuring the rendered text.
+
+    Character counting produced visibly inconsistent results — "Manaka
+    Matsukubo" (16 chars) collapsed to "Manaka M." while "Manaka Hayashi" (14)
+    stayed full, even though they render at almost the same width. Measuring
+    means two names that look the same length are treated the same way.
+    """
+    if font.getlength(name) <= max_w:
+        return name
+    parts = name.split()
+    if len(parts) >= 2:
+        for cand in (f"{parts[0]} {parts[-1][0]}.", parts[-1], parts[0]):
+            if font.getlength(cand) <= max_w:
+                return cand
+    trimmed = name
+    while trimmed and font.getlength(trimmed + "…") > max_w:
+        trimmed = trimmed[:-1]
+    return (trimmed + "…") if trimmed else name
 
 
 def _leaderboard_pitch(rows: list[dict], pitch_h_px: int = 940) -> "Image.Image":
@@ -848,17 +873,35 @@ def _leaderboard_pitch(rows: list[dict], pitch_h_px: int = 940) -> "Image.Image"
 
     # --- Player markers ---
     marker_r = int(W * 0.028)   # radius ~30px
-    name_font  = _get_font(24)
     score_font = _get_font(20)
+
+    # Pick ONE name size for the whole card: the largest size at which every
+    # name fits its slot. Sizing per-name is what made "Manaka Matsukubo"
+    # collapse to "Manaka M." while "Manaka Hayashi" stayed full — two names
+    # that look alike rendered differently. Choosing a single size means the
+    # card is internally consistent, and truncation is a last resort for a card
+    # where even the smallest size can't fit a name.
+    max_label_w = (W - 2 * PAD_X) / 4.5      # keeps neighbouring slots apart
+    names = [_clean_text(r["player_name"]) for r in rows if r["player_name"] != "—"]
+    name_font = _get_font(24)
+    for size in range(24, 15, -1):
+        candidate = _get_font(size)
+        if all(candidate.getlength(n) <= max_label_w for n in names):
+            name_font = candidate
+            break
+    else:
+        name_font = _get_font(16)
 
     for row in rows:
         if row["player_name"] == "—":
             continue
 
         cx, cy = _px(row["x"], row["y"])
+        # Same contrast correction the player card uses. Raw club colours left
+        # Gotham, Boston, Chicago and San Diego rendering as near-black discs on
+        # a near-black pitch; _display_accent holds the hue and lifts lightness.
         hex_color = TEAM_COLORS.get(row.get("team_abbreviation", ""), DEFAULT_TEAM_COLOR)
-        r, g, b = int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
-        fill   = (r, g, b, 255)
+        fill   = _display_accent(hex_color)
         border = (255, 255, 255, 220)
 
         # Filled circle with white border
@@ -871,13 +914,16 @@ def _leaderboard_pitch(rows: list[dict], pitch_h_px: int = 940) -> "Image.Image"
             fill=fill,
         )
 
-        name  = _name_short(_clean_text(row["player_name"]))
+        # name_font was already chosen so every name on this card fits;
+        # _fit_name is the safety net for a pathological outlier.
+        name  = _fit_name(_clean_text(row["player_name"]), name_font, max_label_w)
         score = f"{row['value_score']:+.2f}"
 
-        # Name below marker
+        # Name below marker, centred on it but held inside the margins
         nb = draw.textbbox((0, 0), name, font=name_font)
         nw = nb[2] - nb[0]
-        draw.text((cx - nw // 2, cy + marker_r + 4), name,
+        nx = min(max(cx - nw // 2, PAD_X // 2), W - PAD_X // 2 - nw)
+        draw.text((nx, cy + marker_r + 4), name,
                   font=name_font, fill=(255, 255, 255, 230))
 
         # Score above marker (amber)

@@ -23,6 +23,37 @@ from src.ui import components as c
 from src.ui import loaders, theme
 
 _PREV_COLS = ["_prev_goals_pg", "_prev_assists_pg", "_prev_sog_pg"]
+
+# Columns that should read as whole numbers; everything else numeric gets 2dp.
+_INT_COLS = {"goals", "assists", "points", "gp", "n_players", "round"}
+# Deltas keep an explicit sign so a gain reads as a gain.
+_DELTA_COLS = {"goals_pg_delta", "assists_pg_delta"}
+
+
+def _styled(df: pd.DataFrame, extra_styles=None, keep_numeric: set[str] | None = None):
+    """DataFrame -> Styler that renders missing values as an em dash.
+
+    Number formatting has to live on the Styler rather than in column_config:
+    a NaN left in a float column reaches the grid and renders as "None", and
+    column_config has no null-representation option.
+
+    `keep_numeric` names columns to leave unformatted — ProgressColumn needs a
+    real number, so formatting its column to a string would break the bar.
+    """
+    keep = keep_numeric or set()
+    fmt = {}
+    for col in df.columns:
+        if col in keep:
+            continue
+        if pd.api.types.is_numeric_dtype(df[col]) and not pd.api.types.is_bool_dtype(df[col]):
+            if col in _DELTA_COLS:
+                fmt[col] = "{:+.2f}"
+            else:
+                fmt[col] = "{:.0f}" if col in _INT_COLS else "{:.2f}"
+    styler = c.dash_blanks(df).style.format(fmt, na_rep="—")
+    if extra_styles is not None:
+        styler = styler.apply(lambda _: extra_styles, axis=None)
+    return styler
 _COLOUR_PAIRS = {"goals_pg": "_prev_goals_pg", "assists_pg": "_prev_assists_pg",
                  "sog_pg": "_prev_sog_pg"}
 _MARGIN_PG = 0.03
@@ -90,6 +121,11 @@ def _live_board(board: pd.DataFrame, tables: dict) -> None:
     filtered = filtered.merge(prior, on=["name", "school"], how="left")
 
     st.caption(f"**{len(filtered)} players**, sorted by prospect score — select a row for a profile.")
+    st.caption(
+        "Goals/G, Ast/G and SoG/G are coloured against **that player's own previous season** — "
+        "green means she improved on herself, red means she declined. They are not compared "
+        "between players, so a lower green number can sit beside a higher red one."
+    )
 
     display_cols = [x for x in ["name", "school", "conference", "position", "class_year",
                                 "goals", "assists", "goals_pg", "assists_pg", "sog_pg",
@@ -100,9 +136,16 @@ def _live_board(board: pd.DataFrame, tables: dict) -> None:
     with_prev = filtered[display_cols + [x for x in _PREV_COLS if x in filtered.columns]].reset_index(drop=True)
     styles = with_prev.apply(_colour_row, axis=1, result_type="expand")
     styles = styles[display_cols]
-    shown = with_prev[display_cols]
+    shown = with_prev[display_cols].copy()
 
-    styled = shown.style.apply(lambda _: styles, axis=None)
+    # Percentile stays numeric for the progress bar, but as a whole number so it
+    # never renders as "100.000000" whichever text path the grid takes.
+    if "draft_percentile" in shown.columns:
+        shown["draft_percentile"] = shown["draft_percentile"].round(0).astype("Int64")
+
+    # draft_percentile stays a real number for ProgressColumn (it has no nulls);
+    # every other numeric goes through the Styler so blanks show as em dashes.
+    styled = _styled(shown, extra_styles=styles, keep_numeric={"draft_percentile"})
 
     selection = st.dataframe(
         styled, width="stretch", hide_index=True,
@@ -111,17 +154,19 @@ def _live_board(board: pd.DataFrame, tables: dict) -> None:
             "name":       st.column_config.TextColumn("Player"),
             "school":     st.column_config.TextColumn("School"),
             "conference": st.column_config.TextColumn("Conference"),
-            "position":   st.column_config.TextColumn("Pos"),
-            "class_year": st.column_config.TextColumn("Year"),
-            "goals":      st.column_config.NumberColumn("Goals", format="%.0f"),
-            "assists":    st.column_config.NumberColumn("Assists", format="%.0f"),
-            "goals_pg":   st.column_config.NumberColumn("Goals/G", format="%.2f"),
-            "assists_pg": st.column_config.NumberColumn("Ast/G", format="%.2f"),
-            "sog_pg":     st.column_config.NumberColumn("SoG/G", format="%.2f"),
+            "position":   st.column_config.TextColumn("Pos", width="small"),
+            "class_year": st.column_config.TextColumn("Year", width="small"),
+            "goals":      st.column_config.NumberColumn("Goals"),
+            "assists":    st.column_config.NumberColumn("Assists"),
+            "goals_pg":   st.column_config.NumberColumn("Goals/G"),
+            "assists_pg": st.column_config.NumberColumn("Ast/G"),
+            "sog_pg":     st.column_config.NumberColumn("SoG/G"),
             # "draft_*" are the internal column names; the labels are what users read.
-            "draft_score":      st.column_config.NumberColumn("Prospect score", format="%.2f"),
+            "draft_score": st.column_config.NumberColumn("Prospect score"),
+            # width="medium" so the bar plus its "100%" label are not clipped.
             "draft_percentile": st.column_config.ProgressColumn(
-                "Percentile", min_value=0, max_value=100, format="%.0f%%"),
+                "Percentile", min_value=0, max_value=100, format="%.0f%%",
+                width="medium"),
         },
     )
 
@@ -211,16 +256,16 @@ def _historical_benchmark(summary: pd.DataFrame) -> None:
         "position_group": st.column_config.TextColumn("Position"),
         "round":      st.column_config.NumberColumn("Round", format="%d"),
         "n_players":  st.column_config.NumberColumn("# Matched", format="%d"),
-        "goals_pg":   st.column_config.NumberColumn("Goals/G", format="%.2f"),
-        "assists_pg": st.column_config.NumberColumn("Ast/G", format="%.2f"),
-        "points_pg":  st.column_config.NumberColumn("Pts/G", format="%.2f"),
-        "sog_pg":     st.column_config.NumberColumn("SoG/G", format="%.2f"),
-        "goals":      st.column_config.NumberColumn("Goals", format="%.1f"),
-        "assists":    st.column_config.NumberColumn("Assists", format="%.1f"),
-        "gp":         st.column_config.NumberColumn("Games", format="%.0f"),
+        "goals_pg":   st.column_config.NumberColumn("Goals/G"),
+        "assists_pg": st.column_config.NumberColumn("Ast/G"),
+        "points_pg":  st.column_config.NumberColumn("Pts/G"),
+        "sog_pg":     st.column_config.NumberColumn("SoG/G"),
+        "goals":      st.column_config.NumberColumn("Goals"),
+        "assists":    st.column_config.NumberColumn("Assists"),
+        "gp":         st.column_config.NumberColumn("Games"),
     }
     cols = [x for x in summary.columns if x in cfg]
-    st.dataframe(c.dash_blanks(summary[cols]), width="stretch", hide_index=True,
+    st.dataframe(_styled(summary[cols]), width="stretch", hide_index=True,
                  column_config=cfg)
 
 
@@ -240,11 +285,13 @@ def _improvers(trends: pd.DataFrame) -> None:
 
     # Every column gets a proper header — previously only the four numeric ones
     # were configured and the rest rendered as raw snake_case.
+    # No format= here: the Styler owns number formatting so nulls can render as
+    # em dashes. These entries supply labels only.
     cfg = {
-        "goals_pg_delta":   st.column_config.NumberColumn("Goals/G Δ", format="%+.2f"),
-        "assists_pg_delta": st.column_config.NumberColumn("Ast/G Δ", format="%+.2f"),
-        "prev_goals_pg":    st.column_config.NumberColumn("Prev Goals/G", format="%.2f"),
-        "goals_pg":         st.column_config.NumberColumn("Curr Goals/G", format="%.2f"),
+        "goals_pg_delta":   st.column_config.NumberColumn("Goals/G Δ"),
+        "assists_pg_delta": st.column_config.NumberColumn("Ast/G Δ"),
+        "prev_goals_pg":    st.column_config.NumberColumn("Prev Goals/G"),
+        "goals_pg":         st.column_config.NumberColumn("Curr Goals/G"),
         "name":             st.column_config.TextColumn("Player"),
         "school":           st.column_config.TextColumn("School"),
         "season":           st.column_config.TextColumn("Season"),
@@ -252,4 +299,4 @@ def _improvers(trends: pd.DataFrame) -> None:
         "position":         st.column_config.TextColumn("Pos"),
         "class_year":       st.column_config.TextColumn("Year"),
     }
-    st.dataframe(c.dash_blanks(data), width="stretch", hide_index=True, column_config=cfg)
+    st.dataframe(_styled(data), width="stretch", hide_index=True, column_config=cfg)
