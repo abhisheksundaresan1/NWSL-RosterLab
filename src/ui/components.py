@@ -68,6 +68,36 @@ def metric_grid(metrics: dict[str, str], per_row: int = 4) -> None:
                 )
 
 
+def stat_card(label: str, value: str, caption: str = "",
+              accent: str | None = None) -> None:
+    """A headline figure with a label above and context below.
+
+    Used for the landing page's riser/faller/newcomer cards. `value` is passed
+    already formatted — including "—" when the underlying data is empty, which
+    is a legitimate state rather than an error (see stat_card_empty)."""
+    colour = accent or theme.ACCENT
+    st.markdown(
+        f'<div class="rl-stat">'
+        f'<p class="rl-stat-k">{_esc(label)}</p>'
+        f'<p class="rl-stat-v" style="color:{colour}">{_esc(value)}</p>'
+        f'<p class="rl-stat-c">{_esc(caption)}</p>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def stat_card_empty(label: str, reason: str) -> None:
+    """The card still renders, with a dash and the reason it has no value."""
+    st.markdown(
+        f'<div class="rl-stat">'
+        f'<p class="rl-stat-k">{_esc(label)}</p>'
+        f'<p class="rl-stat-v" style="color:{theme.FG_FAINT}">—</p>'
+        f'<p class="rl-stat-c">{_esc(reason)}</p>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def empty_state(message: str, hint: str | None = None) -> None:
     body = f'<p class="rl-sub">{_esc(message)}</p>'
     if hint:

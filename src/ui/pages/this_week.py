@@ -1,14 +1,24 @@
-"""This week — the recurring drops.
+"""This week — the landing page.
 
-Phase 1 hosts the former "Drops" tab, restyled but functionally unchanged.
-Phase 2 adds a headline summary and riser/faller/newcomer metric cards above it
-and takes over as the landing page.
+Opens with what changed this week: a plain-English headline, three headline
+figures (biggest riser, biggest faller, top newcomer), then the live drops.
+The Undervalued XI sits below as an evergreen section — it is a retrospective
+built from a completed season and does not change week to week, so it should
+not be the lede on a page called "This week".
 
-One deliberate change from the old tab: the Undervalued XI is no longer gated
-behind the season picker. The old tab branched — Undervalued XI *or* the
-in-season drops, never both — so with 2026 as the default the page would have
-opened with "requires a completed season". It now always renders from the most
-recent completed season and says so, with the in-season drops alongside it.
+Two things this page is careful about:
+
+1. The Undervalued XI is not gated behind the season picker. The original tab
+   branched — Undervalued XI *or* the in-season drops, never both — so with 2026
+   as the default the page would have opened with "requires a completed season".
+   It always renders from the most recent completed season, and says so.
+
+2. Every headline figure is computed independently and has its own empty state.
+   compute_movement() returns an empty frame when only one snapshot exists or
+   when the minutes floor excludes everyone, and .head(1).iloc[0] on an empty
+   frame raises IndexError. The newcomer list can also be legitimately empty
+   now that a value floor applies. One missing figure must not take down the
+   landing page.
 """
 
 from __future__ import annotations
@@ -29,22 +39,141 @@ from src.ui import components as c
 from src.ui import loaders, state, theme
 
 
+MOVE_WINDOW = 5          # snapshots back for the "this month" comparison
+MOVE_MIN_MINUTES = 270   # ~3 games; matches the Risers & Fallers floor
+
+
 def render() -> None:
+    snaps = list_snapshots(IN_SEASON_YEAR)
+    latest = snaps[-1] if snaps else None
+
     theme.section(
         "This week",
-        subtitle="Shareable drops, refreshed from the weekly snapshot.",
-        eyebrow_text="NWSL ROSTERLAB",
+        eyebrow_text=(f"NWSL {IN_SEASON_YEAR} · WEEK OF {latest}" if latest
+                      else "NWSL ROSTERLAB"),
     )
 
-    _undervalued_xi()
+    movement = _movement(snaps)
+    newcomers = _newcomer_table(latest)
 
-    snaps = list_snapshots(IN_SEASON_YEAR)
+    _headline(movement, newcomers, latest)
+    _headline_figures(movement, newcomers, snaps)
+
     if len(snaps) >= 2:
         theme.rule()
         _risers_and_fallers(snaps)
     if snaps:
         theme.rule()
         _newcomers(snaps[-1])
+
+    theme.rule()
+    _undervalued_xi()
+
+
+# --- Shared data for the headline + figures ---------------------------------
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _movement_cached(snap_new: str, snap_old: str, min_minutes: int) -> pd.DataFrame:
+    return compute_movement(load_snapshot(snap_new), load_snapshot(snap_old),
+                            K=300, min_minutes_new=min_minutes)
+
+
+def _movement(snaps: list[str]) -> pd.DataFrame:
+    """Movement over roughly the last month, or an empty frame if impossible."""
+    if len(snaps) < 2:
+        return pd.DataFrame()
+    return _movement_cached(snaps[-1], snaps[max(0, len(snaps) - MOVE_WINDOW)],
+                            MOVE_MIN_MINUTES)
+
+
+def _newcomer_table(latest: str | None) -> pd.DataFrame:
+    if not latest:
+        return pd.DataFrame()
+    table = loaders.load_in_season_table(MOVE_MIN_MINUTES, latest)
+    hist = loaders.cached_historical_ids()
+    out = table[~table["player_id"].astype(str).isin(hist)]
+    return out.sort_values("value_score", ascending=False)
+
+
+# --- Headline ---------------------------------------------------------------
+
+def _headline(movement: pd.DataFrame, newcomers: pd.DataFrame,
+              latest: str | None) -> None:
+    """One plain-English sentence about the football.
+
+    Deliberately says nothing about snapshots or pipelines — this is the most
+    read line on the site. Degrades clause by clause rather than all-or-nothing.
+    """
+    parts: list[str] = []
+    if not movement.empty:
+        top = movement.iloc[0]
+        parts.append(
+            f"<b>{top['player_name']}</b> is the league's biggest riser this month, "
+            f"up {abs(top['delta_value_score']):.2f}."
+        )
+        bottom = movement.iloc[-1]
+        if float(bottom["delta_value_score"]) < 0:
+            parts.append(
+                f"<b>{bottom['player_name']}</b> has fallen furthest, "
+                f"down {abs(bottom['delta_value_score']):.2f}."
+            )
+    if not newcomers.empty:
+        first = newcomers.iloc[0]
+        parts.append(
+            f"<b>{first['player_name']}</b> leads all first-year players "
+            f"at {first['value_score']:+.2f}."
+        )
+
+    games = loaders.snapshot_games_est(latest) if latest else None
+    if games:
+        parts.append(f"About {games} games played so far.")
+
+    if not parts:
+        parts.append("The season is under way — check back once a few more games are in.")
+
+    st.markdown(f'<p class="rl-lede">{" ".join(parts)}</p>', unsafe_allow_html=True)
+
+
+def _headline_figures(movement: pd.DataFrame, newcomers: pd.DataFrame,
+                      snaps: list[str]) -> None:
+    """Three figures, each computed and failing independently."""
+    col_r, col_f, col_n = st.columns(3)
+
+    with col_r:
+        if movement.empty:
+            c.stat_card_empty("Biggest riser", _why_no_movement(snaps))
+        else:
+            r = movement.iloc[0]
+            c.stat_card("Biggest riser", str(r["player_name"]),
+                        f"{r['delta_value_score']:+.2f}  ·  {r['team_name']}",
+                        accent=theme.POSITIVE)
+
+    with col_f:
+        fallers = movement[movement["delta_value_score"] < 0] if not movement.empty else movement
+        if fallers.empty:
+            c.stat_card_empty("Biggest faller", _why_no_movement(snaps)
+                              if movement.empty else "No player has fallen this month.")
+        else:
+            f = fallers.iloc[-1]
+            c.stat_card("Biggest faller", str(f["player_name"]),
+                        f"{f['delta_value_score']:+.2f}  ·  {f['team_name']}",
+                        accent=theme.NEGATIVE)
+
+    with col_n:
+        if newcomers.empty:
+            c.stat_card_empty("Top newcomer", "No first-year player has enough minutes yet.")
+        else:
+            n = newcomers.iloc[0]
+            c.stat_card("Top newcomer", str(n["player_name"]),
+                        f"{n['value_score']:+.2f}  ·  {n['team_name']}")
+
+
+def _why_no_movement(snaps: list[str]) -> str:
+    if not snaps:
+        return "No in-season data yet."
+    if len(snaps) < 2:
+        return "Needs a second week of data to compare."
+    return "No player clears the minutes threshold yet."
 
 
 # --- Undervalued XI ---------------------------------------------------------

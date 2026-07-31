@@ -72,8 +72,8 @@ def _header() -> None:
 
 
 PAGES = [
-    st.Page(this_week.render, title="This week", url_path="this-week"),
-    st.Page(players.render,   title="Players",   url_path="players", default=True),
+    st.Page(this_week.render, title="This week", url_path="this-week", default=True),
+    st.Page(players.render,   title="Players",   url_path="players"),
     st.Page(teams.render,     title="Teams",     url_path="teams"),
     st.Page(prospects.render, title="Prospects", url_path="prospects"),
     st.Page(ask.render,       title="Ask",       url_path="ask"),

@@ -175,6 +175,48 @@ _CSS = f"""
 [class*="st-key-prow_"] .rl-name {{ margin-bottom: 0; }}
 [class*="st-key-prow_"] .rl-context {{ margin-bottom: 4px; }}
 
+/* ---- Stat cards (landing page headline figures) -------------------------- */
+.rl-stat {{
+    background: {SURFACE}; border: 1px solid {LINE}; border-radius: 8px;
+    padding: 14px 16px; height: 100%;
+}}
+.rl-stat-k {{
+    font-family: {FONT_MONO}; font-size: 10px; letter-spacing: .14em;
+    text-transform: uppercase; color: {FG_FAINT}; margin: 0 0 6px 0;
+}}
+.rl-stat-v {{
+    font-family: {FONT_DISPLAY}; font-weight: 700; font-size: 27px;
+    line-height: 1.1; margin: 0 0 4px 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}}
+.rl-stat-c {{ font-family: {FONT_TEXT}; font-size: 12px; color: {FG_MUTED}; margin: 0; }}
+
+/* ---- Headline sentence --------------------------------------------------- */
+.rl-lede {{
+    font-family: {FONT_TEXT}; font-size: 17px; line-height: 1.55;
+    color: {FG}; margin: 0 0 18px 0; max-width: 62ch;
+}}
+.rl-lede b {{ color: {ACCENT}; font-weight: 600; }}
+
+/* ---- Depth grid (Teams) -------------------------------------------------- */
+.rl-depth {{
+    background: {SURFACE}; border: 1px solid {LINE}; border-radius: 6px;
+    padding: 10px 12px; height: 100%;
+}}
+.rl-depth-pos {{
+    font-family: {FONT_MONO}; font-size: 10px; letter-spacing: .12em;
+    text-transform: uppercase; color: {FG_FAINT}; margin: 0 0 4px 0;
+}}
+.rl-depth-n {{
+    font-family: {FONT_DISPLAY}; font-weight: 700; font-size: 22px;
+    color: {FG}; margin: 0; line-height: 1.1;
+}}
+.rl-depth-best {{
+    font-family: {FONT_TEXT}; font-size: 12px; color: {FG_MUTED}; margin: 3px 0 0 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}}
+.rl-depth-thin .rl-depth-n {{ color: {NEGATIVE}; }}
+
 /* ---- Metric grid (inside player detail) ---------------------------------- */
 .rl-metric {{
     background: {SURFACE}; border: 1px solid {LINE}; border-radius: 6px;
