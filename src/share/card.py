@@ -111,8 +111,11 @@ def _get_bold_font(size: int) -> ImageFont.FreeTypeFont:
 # ---------------------------------------------------------------------------
 # "Broadcast Dossier" type system  (see assets/CARD_DESIGN_PHILOSOPHY.md)
 #
-# Three roles, three faces — bundled in assets/fonts so Linux (Streamlit Cloud)
+# Three roles, three faces — bundled in static/fonts so Linux (Streamlit Cloud)
 # renders identically to Windows. All OFL-licensed; licences ship alongside.
+# They live under static/ (not assets/) because Streamlit only serves
+# browser-reachable files from there, so the app CSS and this PIL renderer can
+# share ONE copy of each file rather than duplicating them.
 #   display : Big Shoulders  — condensed, athletic. Names and hero figures.
 #   text    : Work Sans      — grotesque. Body copy and labels.
 #   mono    : Geist Mono     — tabular figures and micro-labels.
@@ -120,7 +123,7 @@ def _get_bold_font(size: int) -> ImageFont.FreeTypeFont:
 # hard-fail on a font lookup.
 # ---------------------------------------------------------------------------
 
-_FONT_DIR = Path(__file__).resolve().parents[2] / "assets" / "fonts"
+_FONT_DIR = Path(__file__).resolve().parents[2] / "static" / "fonts"
 
 
 def _load(name: str, size: int, fallback_bold: bool = False) -> ImageFont.FreeTypeFont:
