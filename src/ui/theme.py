@@ -54,10 +54,12 @@ def value_color(v: float) -> str:
 _CSS = f"""
 <style>
 /* ---- Chrome removal -----------------------------------------------------
-   toolbarMode="minimal" in config.toml removes the Fork/GitHub badge; these
-   rules clear the residual footer and decorative header bar.               */
+   toolbarMode="minimal" hides the hamburger but NOT the Fork / GitHub badge
+   that Streamlit Cloud renders into stToolbarActions — verified on the
+   deployed app, where it stayed visible top-right. Hide it explicitly.     */
 #MainMenu, footer, header [data-testid="stDecoration"] {{ display: none !important; }}
 [data-testid="stStatusWidget"] {{ display: none !important; }}
+[data-testid="stToolbarActions"] {{ display: none !important; }}
 
 /* ---- Page rhythm --------------------------------------------------------- */
 .block-container {{ padding-top: 1.2rem; padding-bottom: 4rem; max-width: 1180px; }}
