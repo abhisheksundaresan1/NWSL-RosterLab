@@ -127,7 +127,9 @@ def render() -> None:
                 team_abbr=row.get("team_abbreviation", ""),
                 context=context, value=float(row["value_score"]),
             )
-            with st.expander("Detail, card & analyst take", expanded=False):
+            # Short label on purpose: a longer one wraps at narrow widths and
+            # collides with neighbouring rows.
+            with st.expander("Detail", expanded=False):
                 _player_detail(row, league_ranked, season, min_minutes, selected_pos)
 
     # --- League view (moved off the top of the page) ------------------------

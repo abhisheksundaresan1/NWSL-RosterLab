@@ -120,8 +120,13 @@ _CSS = f"""
 .rl-name {{
     font-family: {FONT_DISPLAY}; font-weight: 700; font-size: 25px;
     color: {FG}; line-height: 1.15; margin: 0;
+    /* Truncate rather than run into the value column when the window is narrow. */
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }}
-.rl-context {{ font-family: {FONT_TEXT}; font-size: 13px; color: {FG_MUTED}; margin: 1px 0 0 0; }}
+.rl-context {{
+    font-family: {FONT_TEXT}; font-size: 13px; color: {FG_MUTED}; margin: 1px 0 0 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}}
 .rl-value {{
     font-family: {FONT_DISPLAY}; font-weight: 700; font-size: 34px;
     text-align: right; line-height: 1.1; margin: 0;
@@ -133,25 +138,42 @@ _CSS = f"""
 /* the team-colour bar that opens each row */
 .rl-teambar {{ width: 4px; border-radius: 2px; height: 46px; margin-top: 6px; }}
 
-/* The per-player "Detail" expander sits inside the row container. Stripped of
-   its panel chrome and pulled up level with the row so each player reads as ONE
-   row with a quiet chevron, rather than a row plus a full-width grey bar.     */
+/* The per-player "Detail" expander sits inside the row container, in NORMAL
+   FLOW beneath the name/value line. It is made unobtrusive by removing its
+   panel chrome and shrinking it — never by pulling it up with a negative
+   margin, which overlapped the team-colour bar and collided with the next row.
+   Subtlety comes from weight, not from overlap.                              */
 [class*="st-key-prow_"] [data-testid="stExpander"] {{
-    margin-top: -14px; margin-bottom: 0;
+    margin-top: 0; margin-bottom: 0;
 }}
 [class*="st-key-prow_"] [data-testid="stExpander"] details {{
     border: none !important; background: transparent !important;
 }}
+/* Streamlit animates the expander by writing an inline height onto <details>.
+   Restyling the summary makes that measurement stale, so an opened row stayed
+   pinned at its collapsed height (18.8px) while its content rendered outside
+   the box and over the next row. Force the open state to size to its content —
+   an inline style loses to !important.                                       */
+[class*="st-key-prow_"] [data-testid="stExpander"] details[open] {{
+    height: auto !important;
+    overflow: visible !important;
+}}
 [class*="st-key-prow_"] [data-testid="stExpander"] summary {{
-    padding: 0 !important; min-height: 0;
-    font-size: 12px; color: {FG_FAINT};
+    padding: 0 0 2px 0 !important; min-height: 0;
+    font-size: 12px; line-height: 1.2; color: {FG_FAINT};
     width: max-content;            /* only as wide as the chevron + label */
+    white-space: nowrap;           /* never wraps into the row above/below */
 }}
 [class*="st-key-prow_"] [data-testid="stExpander"] summary:hover {{ color: {FG}; }}
-/* Expanded body gets its air back, and clears the row above it. */
+/* Expanded body gets its air back. */
 [class*="st-key-prow_"] [data-testid="stExpanderDetails"] {{
-    padding-top: 14px; padding-left: 0;
+    padding-top: 12px; padding-left: 0;
 }}
+
+/* The row's own text block needs a little breathing room above the expander so
+   the two never touch, and the team bar spans only the name/value line. */
+[class*="st-key-prow_"] .rl-name {{ margin-bottom: 0; }}
+[class*="st-key-prow_"] .rl-context {{ margin-bottom: 4px; }}
 
 /* ---- Metric grid (inside player detail) ---------------------------------- */
 .rl-metric {{
@@ -182,6 +204,16 @@ _CSS = f"""
 
 /* ---- Tables -------------------------------------------------------------- */
 [data-testid="stDataFrame"] {{ border: 1px solid {LINE}; border-radius: 6px; }}
+
+/* ---- Narrow windows ------------------------------------------------------
+   Streamlit columns stay side by side well below desktop widths, so the row's
+   type has to step down or the name crowds the value score.                  */
+@media (max-width: 700px) {{
+    .rl-name  {{ font-size: 20px; }}
+    .rl-value {{ font-size: 26px; }}
+    .rl-context {{ font-size: 12px; }}
+    .block-container {{ padding-left: 1rem; padding-right: 1rem; }}
+}}
 
 /* ---- Footer -------------------------------------------------------------- */
 .rl-footer {{
