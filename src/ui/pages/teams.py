@@ -67,14 +67,24 @@ def render() -> None:
     # median value rather than whichever club sorts first alphabetically — that
     # was Angel City, currently the lowest-value squad with two empty depth
     # cells, i.e. the worst possible first impression of the page.
+    #
+    # The default is applied by SEEDING session state, not by passing index=.
+    # A keyed widget whose key already exists in session state ignores index
+    # entirely, so once a visitor had landed on any club that choice stuck for
+    # the rest of their session and no change of default could take effect.
     requested = st.query_params.get("team")
+    stored = st.session_state.get("team_pick")
+
     if requested in abbrs:
-        default_idx = abbrs.index(requested)
-    else:
-        default_idx = abbrs.index(_strongest_squad(squad_table, abbrs))
+        # A deep link beats whatever the session happens to remember.
+        if stored != requested:
+            st.session_state["team_pick"] = requested
+    elif stored not in abbrs:
+        # No link and nothing valid remembered — open on the strongest squad.
+        st.session_state["team_pick"] = _strongest_squad(squad_table, abbrs)
+
     chosen = st.selectbox(
-        "Club", abbrs, index=default_idx,
-        format_func=lambda a: names.get(a, a), key="team_pick",
+        "Club", abbrs, format_func=lambda a: names.get(a, a), key="team_pick",
     )
     if st.query_params.get("team") != chosen:
         st.query_params["team"] = chosen
