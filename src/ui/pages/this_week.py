@@ -167,6 +167,15 @@ def _headline_figures(movement: pd.DataFrame, newcomers: pd.DataFrame,
             c.stat_card("Top newcomer", str(n["player_name"]),
                         f"{n['value_score']:+.2f}  ·  {n['team_name']}")
 
+    # The floor behind all three figures, stated where the figures are rather
+    # than only in the Risers & Fallers section further down.
+    st.caption(
+        f"Riser and faller compare the latest weekly snapshot with roughly a month "
+        f"earlier, counting only players with at least **{MOVE_MIN_MINUTES} minutes** "
+        f"(about three matches) in the latest snapshot. Value scores are shrunk "
+        f"toward the position mean (K = 300) and are not comparable across seasons."
+    )
+
 
 def _why_no_movement(snaps: list[str]) -> str:
     if not snaps:
@@ -190,7 +199,9 @@ def _undervalued_xi() -> None:
         "Undervalued XI",
         subtitle=(f"Highest-value outfield players left out of the {season} NWSL Best XI "
                   f"(First or Second). Minimum {uv_min:,} minutes, so injury-shortened "
-                  "seasons don't read as snubs. Outfield only."),
+                  "seasons don't read as snubs. A slot is filled only if the best "
+                  "available player ranks in the **top 3 — or top 30% — of her "
+                  "position**; otherwise it is left blank. Outfield only."),
         eyebrow_text=f"FROM THE COMPLETED {season} SEASON",
     )
 
@@ -287,7 +298,10 @@ def _newcomers(latest_snap: str) -> None:
     theme.section(
         "Newcomers · first year in NWSL",
         subtitle=("Highest-value outfield players in their first NWSL season — college "
-                  "signings, international transfers and returnees alike. Outfield only."),
+                  "signings, international transfers and returnees alike. Outfield only. "
+                  "**Positions are left blank where no first-year player is above the "
+                  "positional average** — an empty slot is a deliberate omission, not a "
+                  "missing graphic."),
         eyebrow_text=f"NWSL {IN_SEASON_YEAR} · IN PROGRESS",
     )
 

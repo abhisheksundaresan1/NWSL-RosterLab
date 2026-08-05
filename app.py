@@ -42,11 +42,15 @@ from src.ui.pages import (                           # noqa: E402
 theme.inject()
 
 
-def _header() -> None:
+def _header(season_applies: bool = True) -> None:
     """Brand on the left, the single global season control on the right.
 
     Season lives here rather than on Players because it drives This week, Players
     and Teams alike — one control, one value, read everywhere via src/ui/state.
+
+    `season_applies=False` disables the control on pages it does not drive
+    (Prospects is NCAA college data). Showing a live "2026 · in progress" next to
+    a college board invites the reader to assume they are looking at NWSL 2026.
     """
     left, right = st.columns([6, 2], vertical_alignment="center")
     with left:
@@ -65,10 +69,37 @@ def _header() -> None:
             format_func=state.season_label,
             key="rl_season_select",
             label_visibility="collapsed",
+            disabled=not season_applies,
+            help=(
+                "NWSL season. Value scores are NOT comparable across seasons: the "
+                "in-season year is Bayesian-shrunk (K=300) toward the position mean "
+                "and then re-standardised, so its spread differs from a completed "
+                "season even though the metric shares a name."
+                if season_applies else
+                "The Prospect Board is NCAA college data and is not affected by this control."
+            ),
         )
-        if choice != current:
+        if season_applies and choice != current:
             state.set_season(choice)
             st.rerun()
+
+
+def _footer() -> None:
+    """Persistent, always-visible attribution on every page.
+
+    The sources list also appears on Method, but that is a click away — the
+    credit for the underlying Goals Added model belongs where nobody has to
+    look for it.
+    """
+    st.markdown(
+        '<div class="rl-footer">'
+        '<span>Player data: <a href="https://www.americansocceranalysis.com/" '
+        'target="_blank" rel="noopener">American Soccer Analysis</a> '
+        '(Goals Added) · ages: Wikidata · college: NCAA</span>'
+        '<span>Independent project — not affiliated with the NWSL or ASA</span>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
 
 
 PAGES = [
@@ -84,7 +115,10 @@ PAGES = [
 # nav bar, which we render below instead.
 nav = st.navigation(PAGES, position="hidden")
 
-_header()
+# The season control drives the NWSL pages only; Prospects is NCAA college data.
+_season_applies = getattr(nav, "url_path", "") != "prospects"
+
+_header(season_applies=_season_applies)
 
 with st.container(key="rl_nav"):
     cols = st.columns(len(PAGES) + 2)
@@ -93,3 +127,5 @@ with st.container(key="rl_nav"):
             st.page_link(page, label=page.title, width="stretch")
 
 nav.run()
+
+_footer()

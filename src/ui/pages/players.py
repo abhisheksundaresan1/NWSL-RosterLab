@@ -103,8 +103,10 @@ def render() -> None:
     if in_season:
         st.warning(
             f"**Early-season data** — about {games_est} games played. Value scores are "
-            "stabilized toward the position average so small samples can't dominate. "
-            "Treat these as directional.",
+            "Bayesian-shrunk toward the position average using **K = 300 minutes**, then "
+            "re-standardised, so small samples can't dominate. That also means these "
+            "scores are **not comparable with a completed season's** even though the "
+            "metric shares a name. Treat them as directional.",
             icon=":material/info:",
         )
     for w in validate_value_table(full_table):

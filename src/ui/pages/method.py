@@ -26,13 +26,33 @@ from src.ui import loaders, state, theme
 
 _ROOT = Path(__file__).resolve().parents[3]
 
+# The floor run_validation() uses. Kept as a named constant so the disclosure
+# below and the call site cannot drift apart.
+VALIDATION_MIN_MINUTES = 500
+
+
+def _current_default_floor() -> int:
+    """The qualifying floor the app would use for the selected season.
+
+    Computed rather than read from session state: state.get_min_minutes() seeds
+    a value when it is first called, and calling it here (where games_est is
+    unknown) both returned the wrong number for the in-season year and polluted
+    the value Players later relies on.
+    """
+    season = state.get_season()
+    if season == IN_SEASON_YEAR:
+        snap = loaders.latest_snapshot()
+        if snap:
+            return state.default_min_minutes(season, loaders.snapshot_games_est(snap))
+    return state.default_min_minutes(season)
+
 
 @st.cache_data(show_spinner="Running validation across all seasons…", ttl=86400)
 def _load_validation() -> dict:
     cached = load_validation_cache()
     if cached is not None:
         return cached
-    result = run_validation(min_minutes=500)
+    result = run_validation(min_minutes=VALIDATION_MIN_MINUTES)
     save_validation_cache(result)
     return result
 
@@ -56,6 +76,29 @@ def render() -> None:
         eyebrow_text="NWSL ROSTERLAB",
     )
 
+    # Above the sub-tabs deliberately: these are the things a reader needs
+    # before any number on this page means anything, and sub-tab content is not
+    # even in the page until its tab is clicked.
+    st.warning(
+        "**The position weights are my editorial judgement, not fitted parameters.** "
+        "Each action type is multiplied by a weight chosen to reflect what a position "
+        "is for — a centre back's defensive actions count 1.6×, her shooting 0.2×; a "
+        "striker is the reverse. Those numbers were picked by me as a scouting opinion "
+        "and were **not** estimated from outcome data. Disagreeing with them is "
+        "reasonable; they live in one editable dictionary (`POSITION_WEIGHTS`).",
+        icon=":material/warning:",
+    )
+    st.info(
+        "**Value scores are not comparable across seasons.** The in-season year is "
+        "Bayesian-shrunk toward the position mean with **K = 300** minutes and then "
+        "re-standardised, so its spread differs from a completed season even though "
+        "the metric carries the same name. They are also not comparable across "
+        "positions in any season.",
+        icon=":material/info:",
+    )
+    _sources_and_freshness()
+    theme.rule()
+
     tab_holds, tab_how, tab_data = st.tabs(
         ["Does it hold up?", "How it works", "Data & glossary"]
     )
@@ -69,11 +112,42 @@ def render() -> None:
 
 # --- Validation --------------------------------------------------------------
 
+def _sources_and_freshness() -> None:
+    """Attribution + data age, rendered above the sub-tabs so it is always in the
+    page rather than one click away."""
+    season = state.get_season()
+    line = (
+        "Player data from **[American Soccer Analysis](https://www.americansocceranalysis.com/)** "
+        "(Goals Added, xG, xA) · ages from Wikidata · Best XI from Wikipedia · "
+        "college data from the NCAA."
+    )
+    if season == IN_SEASON_YEAR:
+        snap = loaders.latest_snapshot()
+        if snap:
+            line += f" In-season data refreshes weekly; latest snapshot **{snap}**."
+    else:
+        line += f" {season} is a completed season — its data is static."
+    st.caption(line)
+
+
 def _validation() -> None:
     st.caption(
         "Testing whether the value score picks out the same players the NWSL's own "
         "Best XI voters chose. Fully deterministic — no AI involved."
     )
+    floor = _current_default_floor()
+    if floor == VALIDATION_MIN_MINUTES:
+        st.caption(
+            f"**Computed at a {VALIDATION_MIN_MINUTES:,}-minute qualifying floor**, which "
+            f"matches the pool currently displayed for this season."
+        )
+    else:
+        st.caption(
+            f"**These statistics were computed at a {VALIDATION_MIN_MINUTES:,}-minute "
+            f"qualifying floor**, which is not the pool the app currently displays — the "
+            f"default floor for the selected season is **{floor:,} minutes**. Read them as "
+            f"a property of the model, not a measurement of the players now on screen."
+        )
 
     if "validation_result" not in st.session_state:
         with st.spinner("Loading validation results…"):
@@ -212,7 +286,7 @@ strength-of-schedule adjustment.
 
 def _rerun_validation() -> None:
     _load_validation.clear()
-    st.session_state["validation_result"] = run_validation(min_minutes=500)
+    st.session_state["validation_result"] = run_validation(min_minutes=VALIDATION_MIN_MINUTES)
     save_validation_cache(st.session_state["validation_result"])
 
 

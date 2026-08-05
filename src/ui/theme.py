@@ -263,8 +263,10 @@ _CSS = f"""
 .rl-footer {{
     font-family: {FONT_MONO}; font-size: 11px; color: {FG_FAINT};
     border-top: 1px solid {LINE}; margin-top: 40px; padding-top: 14px;
-    display: flex; justify-content: space-between;
+    display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap;
 }}
+.rl-footer a {{ color: {FG_MUTED}; text-decoration: underline; }}
+.rl-footer a:hover {{ color: {ACCENT}; }}
 </style>
 """
 

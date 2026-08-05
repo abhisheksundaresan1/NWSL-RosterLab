@@ -68,6 +68,17 @@ def render() -> None:
                   "players are compared fairly."),
         eyebrow_text="NCAA D-I WOMEN'S SOCCER · 2025-26",
     )
+    # Stated explicitly: the header season control reads "2026 · in progress" on
+    # the NWSL pages, and a soccer reader landing here would otherwise assume
+    # this board is NWSL 2026 data.
+    st.info(
+        "**This page is college data, not NWSL.** Every player below is an "
+        "NCAA Division I women's soccer player from the **2025-26 college season**. "
+        "These are not NWSL players and none of these numbers are NWSL numbers. "
+        "The season selector in the header applies only to the NWSL pages and is "
+        "disabled here.",
+        icon=":material/school:",
+    )
 
     try:
         if "college_tables" not in st.session_state:

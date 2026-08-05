@@ -59,9 +59,19 @@ def render() -> None:
     abbrs = teams["team_abbreviation"].tolist()
     names = dict(zip(teams["team_abbreviation"], teams["team_name"]))
 
+    qual_min = state.get_min_minutes(season)
+    squad_table = _table(season, qual_min)
+
     # --- Selection, seeded from the URL so links are shareable --------------
+    # A ?team= link always wins. Without one, open on the strongest squad by
+    # median value rather than whichever club sorts first alphabetically — that
+    # was Angel City, currently the lowest-value squad with two empty depth
+    # cells, i.e. the worst possible first impression of the page.
     requested = st.query_params.get("team")
-    default_idx = abbrs.index(requested) if requested in abbrs else 0
+    if requested in abbrs:
+        default_idx = abbrs.index(requested)
+    else:
+        default_idx = abbrs.index(_strongest_squad(squad_table, abbrs))
     chosen = st.selectbox(
         "Club", abbrs, index=default_idx,
         format_func=lambda a: names.get(a, a), key="team_pick",
@@ -69,8 +79,6 @@ def render() -> None:
     if st.query_params.get("team") != chosen:
         st.query_params["team"] = chosen
 
-    qual_min = state.get_min_minutes(season)
-    squad_table = _table(season, qual_min)
     squad = squad_table[squad_table["team_abbreviation"] == chosen] if squad_table is not None \
         else pd.DataFrame()
     depth = depth_table[depth_table["team_abbreviation"] == chosen]
@@ -89,6 +97,20 @@ def render() -> None:
         )
         theme.rule()
     _squad(squad, squad_table, season, qual_min)
+
+
+def _strongest_squad(squad_table: pd.DataFrame | None, abbrs: list[str]) -> str:
+    """Club with the highest median value score, as the landing default.
+
+    Median rather than mean because the mean is pulled hard by outliers in small
+    qualifying pools. This is only a default view — it is never presented to the
+    user as a league ranking, which the data does not support.
+    """
+    if squad_table is None or squad_table.empty:
+        return abbrs[0]
+    med = squad_table.groupby("team_abbreviation")["value_score"].median()
+    med = med[med.index.isin(abbrs)]
+    return med.idxmax() if not med.empty else abbrs[0]
 
 
 def _table(season: str, min_minutes: int) -> pd.DataFrame | None:
