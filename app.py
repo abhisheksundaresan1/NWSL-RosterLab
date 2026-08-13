@@ -146,6 +146,11 @@ _season_applies = getattr(nav, "url_path", "") != "prospects"
 track.start_session()
 track.page_view(getattr(nav, "url_path", "") or "this-week")
 
+# TEMPORARY diagnostic (?debug=identity): does st.context.cookies actually carry
+# our cookie through Streamlit Cloud's proxy? Remove once answered.
+if st.query_params.get("debug") == "identity":
+    st.json(track.debug_identity())
+
 _header(season_applies=_season_applies)
 
 with st.container(key="rl_nav"):

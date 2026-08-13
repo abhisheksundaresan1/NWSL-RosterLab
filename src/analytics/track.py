@@ -143,6 +143,39 @@ def distinct_id() -> str:
     return vid
 
 
+def debug_identity() -> dict:
+    """What the SERVER can actually see about cookies. Diagnostic only.
+
+    Cookie VALUES are redacted apart from our own rl_vid, which is a random UUID
+    we minted: the same jar carries Streamlit's XSRF token, and this renders in
+    the page behind nothing more than a query parameter.
+    """
+    out: dict = {}
+    try:
+        cookies = dict(st.context.cookies or {})
+        out["cookies_type"] = type(st.context.cookies).__name__
+        out["cookie_keys"] = sorted(cookies)
+        out["cookie_count"] = len(cookies)
+        out["rl_vid_in_context"] = cookies.get(_COOKIE, "<ABSENT>")
+    except Exception as e:
+        out["cookies_error"] = f"{type(e).__name__}: {e}"
+
+    try:
+        headers = dict(st.context.headers or {})
+        raw = headers.get("Cookie") or headers.get("cookie")
+        out["header_names"] = sorted(headers)
+        out["raw_cookie_header_present"] = raw is not None
+        out["raw_cookie_header_len"] = len(raw) if raw else 0
+        out["raw_cookie_names"] = (
+            sorted(c.split("=")[0].strip() for c in raw.split(";")) if raw else []
+        )
+    except Exception as e:
+        out["headers_error"] = f"{type(e).__name__}: {e}"
+
+    out["server_side_distinct_id"] = st.session_state.get(_DISTINCT, "<not yet resolved>")
+    return out
+
+
 def event(name: str, **props) -> None:
     """Send one event. Silent no-op when analytics is off; never raises."""
     client = _client()
