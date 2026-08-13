@@ -143,6 +143,11 @@ _season_applies = getattr(nav, "url_path", "") != "prospects"
 # per session, page_view only when the slug changes. Streamlit reruns the whole
 # script on every interaction, so an unguarded call here would inflate counts by
 # an order of magnitude. Both are no-ops when POSTHOG_API_KEY is unset.
+# The identity component must render exactly once per run, before any event, so
+# it lives here rather than inside track.event(). It returns None on a session's
+# first run; events raised in the meantime are buffered and flushed when the
+# browser reports its id on the following rerun.
+track.ensure_identity()
 track.start_session()
 track.page_view(getattr(nav, "url_path", "") or "this-week")
 

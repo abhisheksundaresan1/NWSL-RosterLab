@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<!--
+  RosterLab visitor identity.
+
+  This exists because st.html/st.iframe can only WRITE into the browser — they
+  have no way to hand a value back to Python. A Streamlit custom component does,
+  via the component value channel, which is a websocket message rather than a
+  request header. That distinction is the whole point: it does not depend on
+  cookies surviving Streamlit Cloud's proxy.
+
+  localStorage is the SINGLE source of truth. There is deliberately no second
+  copy anywhere: the previous cookie-based attempt had the browser holding one
+  id while the server minted another every session, and nothing surfaced the
+  divergence. One store cannot disagree with itself.
+
+  No fingerprinting: the id is a random UUID, generated in the browser. It is
+  not derived from IP, user-agent, or anything else about the visitor.
+-->
+<html>
+  <head><meta charset="utf-8" /></head>
+  <body style="margin:0;padding:0;height:0;overflow:hidden">
+    <script>
+      var KEY = "rl_vid";
+      var LEGACY_COOKIE = "rl_vid";
+
+      function send(type, data) {
+        window.parent.postMessage(
+          Object.assign({ isStreamlitMessage: true, type: type }, data), "*"
+        );
+      }
+
+      function uuid() {
+        if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+        // Fallback for older browsers: random, not derived from anything.
+        return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+          var r = (window.crypto && window.crypto.getRandomValues)
+            ? window.crypto.getRandomValues(new Uint8Array(1))[0] % 16
+            : Math.floor(Math.random() * 16);
+          var v = c === "x" ? r : (r & 0x3) | 0x8;
+          return v.toString(16);
+        });
+      }
+
+      function resolveId() {
+        var id = null;
+        try {
+          id = window.localStorage.getItem(KEY);
+          if (!id) {
+            id = uuid();
+            window.localStorage.setItem(KEY, id);
+          }
+        } catch (e) {
+          // Storage blocked (private mode with storage disabled, or a strict
+          // policy). Fall back to a per-load id: this visit counts as new,
+          // which is the honest outcome. Never fingerprint to recover it.
+          id = id || uuid();
+        }
+        return id;
+      }
+
+      function clearLegacyCookie() {
+        // The old cookie is no longer read by anything. Remove it so there is
+        // exactly one store and no chance of a future reader picking the stale
+        // value back up.
+        try {
+          if (document.cookie.indexOf(LEGACY_COOKIE + "=") !== -1) {
+            document.cookie = LEGACY_COOKIE + "=; path=/; max-age=0; SameSite=Lax";
+          }
+        } catch (e) {}
+      }
+
+      function onRender() {
+        clearLegacyCookie();
+        var id = resolveId();
+        send("streamlit:setFrameHeight", { height: 0 });
+        send("streamlit:setComponentValue", { value: id, dataType: "json" });
+      }
+
+      // Streamlit re-sends RENDER on every rerun; resolving is idempotent because
+      // the value comes from localStorage after the first write.
+      window.addEventListener("message", function (e) {
+        if (e.data && e.data.type === "streamlit:render") onRender();
+      });
+
+      send("streamlit:componentReady", { apiVersion: 1 });
+      send("streamlit:setFrameHeight", { height: 0 });
+    </script>
+  </body>
+</html>

@@ -21,17 +21,43 @@ page_view fires only when the page slug actually changes, session_start only
 once per session. Download and query events need no guard — the Streamlit APIs
 that produce them return True only on the interaction rerun.
 
-IDENTITY AND PRIVACY
-====================
-A single first-party cookie, `rl_vid`, holding a random UUID. Nothing else.
+IDENTITY: WHY A CUSTOM COMPONENT AND NOT A COOKIE
+=================================================
+A random UUID in the browser's localStorage, read back through a Streamlit
+custom component (src/analytics/rl_identity/).
 
-There is deliberately NO fingerprint fallback. Hashing IP + user-agent would
-recover some of the visitors who block cookies, but that is browser
-fingerprinting on a public site, and the accuracy is not worth it. When the
-cookie is unavailable the visit simply counts as new, which undercounts
-returning visitors by an unknown amount — an accepted, stated limitation.
+The obvious approach — write a first-party cookie, read it via
+st.context.cookies — DOES NOT WORK on Streamlit Community Cloud. Measured on the
+deployed app:
 
-`st.context.ip_address` is never read. No IP address is sent to PostHog.
+    cookies_type              StreamlitCookies
+    cookie_keys               []
+    cookie_count              0
+    raw_cookie_header_present False
+    header_names              [... Sec-Websocket-Key, Upgrade, Connection,
+                               X-Forwarded-For, X-Streamlit-User]
+
+The headers Python sees are the WEBSOCKET UPGRADE headers, and Cloud's proxy
+does not forward the Cookie header through that upgrade. The browser holds the
+cookie perfectly well; the server is simply never told about it.
+
+That produced a silent, nasty failure: the writer only wrote when the cookie was
+absent, so the browser kept its original id forever while the server minted a
+fresh UUID on every session. The two diverged with nothing to indicate it, and
+PostHog recorded a new person per reload.
+
+The component fixes it structurally, not by patching the symptom:
+
+  * It returns a value to Python over the component channel — a websocket
+    message, not a request header — so the proxy's header handling is irrelevant.
+  * localStorage is the SINGLE source of truth. The server never mints an id at
+    all; it only ever reports what the browser gave it. Two stores cannot
+    disagree when there is only one store. The legacy cookie is actively cleared.
+
+Still NO fingerprinting. The id is a random UUID generated in the browser, never
+derived from IP or user-agent. `st.context.ip_address` is never read, and no IP
+is sent to PostHog. If storage is blocked the visit counts as new — an accepted,
+stated undercount rather than a reason to fingerprint.
 
 FAIL-OPEN
 =========
@@ -42,17 +68,16 @@ outage cannot raise into the Streamlit thread.
 
 from __future__ import annotations
 
-import uuid
+from pathlib import Path
 
 import streamlit as st
-
-_COOKIE = "rl_vid"
-_COOKIE_MAX_AGE = 60 * 60 * 24 * 365      # one year
+import streamlit.components.v1 as components
 
 _SESSION_FLAG = "_rl_analytics_session"
 _LAST_PAGE = "_rl_analytics_last_page"
 _CLIENT = "_rl_analytics_client"
 _DISTINCT = "_rl_analytics_distinct_id"
+_PENDING = "_rl_analytics_pending"
 
 
 def _secret(name: str, default: str = "") -> str:
@@ -64,6 +89,10 @@ def _secret(name: str, default: str = "") -> str:
         pass
     import os
     return os.environ.get(name, default)
+
+
+def _analytics_on() -> bool:
+    return bool(_secret("POSTHOG_API_KEY"))
 
 
 def _client():
@@ -95,52 +124,64 @@ def _client():
     return client
 
 
-def _ensure_cookie_writer(vid: str) -> None:
-    """Ask the browser to persist `vid` as a first-party cookie.
-
-    It writes on the app's own origin, which is why the value survives to the
-    next visit and makes a returning visitor recognisable at all.
-
-    st.html(unsafe_allow_javascript=True), which runs the script in the main
-    document. The two iframe-based alternatives were both tried and rejected:
-    st.components.v1.html works but is deprecated with a removal date of
-    2026-06-01 that has already passed, and st.iframe rendered no element at all
-    at height=0. Running in the main document is also simpler — the script writes
-    document.cookie directly instead of reaching through window.parent.
-    """
-    st.html(
-        f"""<script>
-        try {{
-            if (document.cookie.indexOf("{_COOKIE}=") === -1) {{
-                document.cookie = "{_COOKIE}={vid}; path=/; max-age={_COOKIE_MAX_AGE}; SameSite=Lax";
-            }}
-        }} catch (e) {{}}
-        </script>""",
-        unsafe_allow_javascript=True,
+@st.cache_resource(show_spinner=False)
+def _identity_component():
+    """The declared component, built once per process."""
+    return components.declare_component(
+        "rl_identity", path=str(Path(__file__).parent / "rl_identity")
     )
 
 
-def distinct_id() -> str:
-    """Stable per-visitor id: the cookie when present, otherwise a fresh UUID.
+def ensure_identity() -> str | None:
+    """Render the identity component once per run and return the visitor id.
 
-    A fresh UUID means this visit is counted as a NEW visitor. That is the
-    intended behaviour when cookies are blocked — see the module docstring.
+    Call this ONCE, early, from the entrypoint — not from inside event(). A
+    keyed component may only be rendered once per run, and event() can fire
+    several times in a single run.
+
+    Returns None on the very first run of a session: the component has not yet
+    reported back. Setting a component value triggers a rerun, so the id arrives
+    moments later and the events buffered in the meantime are flushed then.
     """
-    if _DISTINCT in st.session_state:
-        return st.session_state[_DISTINCT]
+    known = st.session_state.get(_DISTINCT)
+    if known:
+        # Drain anything that queued up while the id was still unknown.
+        if st.session_state.get(_PENDING):
+            client = _client()
+            if client is not None:
+                _flush(client, known)
+        return known
+    if not _analytics_on():
+        # No key configured: never touch the visitor's browser storage at all.
+        return None
 
-    vid = ""
+    vid = None
     try:
-        vid = st.context.cookies.get(_COOKIE, "") or ""
+        vid = _identity_component()(key="rl_identity", default=None)
     except Exception:
-        vid = ""
+        vid = None
 
-    if not vid:
-        vid = str(uuid.uuid4())
-        _ensure_cookie_writer(vid)
+    if vid:
+        st.session_state[_DISTINCT] = str(vid)
+        # Flush HERE, not lazily on the next event. On the rerun where the id
+        # arrives, start_session() and page_view() both return early (their
+        # guards are already set from the first run), so no further event() call
+        # happens and a lazy flush would silently drop the session's first
+        # page_view — the one carrying the referrer.
+        client = _client()
+        if client is not None:
+            _flush(client, str(vid))
+        return str(vid)
+    return None
 
-    st.session_state[_DISTINCT] = vid
-    return vid
+
+def distinct_id() -> str | None:
+    """The resolved visitor id, or None until the browser has reported it.
+
+    Read-only: this never mints an id. The browser is the only source, which is
+    what makes server and browser incapable of diverging.
+    """
+    return st.session_state.get(_DISTINCT)
 
 
 def debug_identity() -> dict:
@@ -156,7 +197,7 @@ def debug_identity() -> dict:
         out["cookies_type"] = type(st.context.cookies).__name__
         out["cookie_keys"] = sorted(cookies)
         out["cookie_count"] = len(cookies)
-        out["rl_vid_in_context"] = cookies.get(_COOKIE, "<ABSENT>")
+        out["rl_vid_in_context"] = cookies.get("rl_vid", "<ABSENT — expected: identity no longer uses cookies>")
     except Exception as e:
         out["cookies_error"] = f"{type(e).__name__}: {e}"
 
@@ -173,20 +214,50 @@ def debug_identity() -> dict:
         out["headers_error"] = f"{type(e).__name__}: {e}"
 
     out["server_side_distinct_id"] = st.session_state.get(_DISTINCT, "<not yet resolved>")
+    out["identity_source"] = "localStorage via rl_identity component"
+    out["analytics_enabled"] = _analytics_on()
+    out["buffered_events"] = len(st.session_state.get(_PENDING, []))
     return out
 
 
 def event(name: str, **props) -> None:
-    """Send one event. Silent no-op when analytics is off; never raises."""
+    """Send one event. Silent no-op when analytics is off; never raises.
+
+    Events raised before the browser has reported its id are BUFFERED rather
+    than dropped or sent under a throwaway id. Without this the first page_view
+    of every session — the most important one, since it carries the referrer —
+    would either vanish or be attributed to a person who never existed.
+    """
     client = _client()
     if client is None:
         return
+
+    clean = {k: v for k, v in props.items() if v is not None}
+    vid = distinct_id()
+
+    if vid is None:
+        pending = st.session_state.setdefault(_PENDING, [])
+        if len(pending) < 50:          # bounded; a stuck component can't grow it forever
+            pending.append((name, clean))
+        return
+
+    _flush(client, vid)
+    _capture(client, vid, name, clean)
+
+
+def _flush(client, vid: str) -> None:
+    """Send anything buffered before the id arrived, in original order."""
+    pending = st.session_state.get(_PENDING)
+    if not pending:
+        return
+    st.session_state[_PENDING] = []
+    for name, props in pending:
+        _capture(client, vid, name, props)
+
+
+def _capture(client, vid: str, name: str, props: dict) -> None:
     try:
-        client.capture(
-            distinct_id=distinct_id(),
-            event=name,
-            properties={k: v for k, v in props.items() if v is not None},
-        )
+        client.capture(distinct_id=vid, event=name, properties=props)
     except Exception:
         pass
 
