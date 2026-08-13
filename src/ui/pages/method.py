@@ -18,6 +18,9 @@ import streamlit as st
 
 from src.analysis.validation import run_validation, load_validation_cache, save_validation_cache
 from src.analysis.season import IN_SEASON_YEAR
+from src.analysis.form import (
+    FORM_WINDOW_DAYS, K_FORM, MIN_MINUTES_FORM, SMALL_COHORT, MIN_COHORT_FOR_RANK,
+)
 from src.data.sources import (
     fetch_player_goals_added, fetch_player_xgoals, fetch_players, fetch_teams,
     fetch_player_birthdates,
@@ -29,6 +32,10 @@ _ROOT = Path(__file__).resolve().parents[3]
 # The floor run_validation() uses. Kept as a named constant so the disclosure
 # below and the call site cannot drift apart.
 VALIDATION_MIN_MINUTES = 500
+
+# The season model's shrinkage constant, quoted in the Form explainer so the
+# contrast with K_FORM is stated with a number rather than asserted.
+SEASON_K = 300
 
 
 def _current_default_floor() -> int:
@@ -106,6 +113,8 @@ def render() -> None:
         _validation()
     with tab_how:
         _how_it_works()
+        theme.rule()
+        _form_method()
     with tab_data:
         _data_and_glossary()
 
@@ -124,10 +133,56 @@ def _sources_and_freshness() -> None:
     if season == IN_SEASON_YEAR:
         snap = loaders.latest_snapshot()
         if snap:
-            line += f" In-season data refreshes weekly; latest snapshot **{snap}**."
+            line += f" In-season data refreshes daily; latest snapshot **{snap}**."
     else:
         line += f" {season} is a completed season — its data is static."
     st.caption(line)
+
+    # Privacy. Short, and on the page rather than in a policy nobody opens.
+    st.caption(
+        "**Privacy** — we count visits with a single first-party cookie so we can tell "
+        "how many people come back. We collect no personal data and no IP addresses. "
+        "Blocking the cookie does not affect anything on the site."
+    )
+
+
+def _form_method() -> None:
+    """What Form is, why its constants differ from the season model's."""
+    st.markdown(
+        f"""
+**Form — the last {FORM_WINDOW_DAYS} days**
+
+Form is a **separate metric** from the season value score. It is never added to it,
+subtracted from it, or shown in the same column. A player has both, and they answer
+different questions: the season score is *how good has she been all year*, form is
+*how is she playing right now*.
+
+The method is the same shape as the season model — per-90, position weights, shrink,
+then z-score within position — over a {FORM_WINDOW_DAYS}-day window instead of the
+season. Two constants differ, deliberately:
+
+* **Minutes floor: {MIN_MINUTES_FORM}** (about two full matches). Below it, nothing is
+  published for that player.
+* **Shrinkage K = {K_FORM} minutes**, against {SEASON_K} for the season model. A
+  {FORM_WINDOW_DAYS}-day window is roughly four matches; shrinking that toward the
+  position average at K = {SEASON_K} would flatten the metric into noise and defeat the
+  purpose of measuring recent form.
+
+**Change is a rate, not a score.** The riser/faller number is the difference in
+*weighted goals added per 90* against the previous {FORM_WINDOW_DAYS} days — a real
+quantity in g+/90. It is deliberately **not** the difference of two form z-scores: the
+two windows qualify different players, so their z-scores are standardised against
+different groups and differencing them would be meaningless. Change is only shown for
+players clearing {MIN_MINUTES_FORM} minutes in **both** windows, which is why an
+international break leaves most players without one.
+
+**Small cohorts.** A {FORM_WINDOW_DAYS}-day window at a {MIN_MINUTES_FORM}-minute floor
+produces thinner positional groups than the season table. Every form figure shows its
+cohort size. At **{SMALL_COHORT} or fewer** qualifiers the ranking is captioned as
+indicative; below **{MIN_COHORT_FOR_RANK}**, no rank and no score are published at all —
+only the rate and the sample size, because a z-score over four players is not a ranking.
+"""
+    )
 
 
 def _validation() -> None:

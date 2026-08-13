@@ -12,6 +12,8 @@ pages: if a rule is needed, it goes in _CSS with a comment saying what it is for
 
 from __future__ import annotations
 
+import re as _re
+
 import streamlit as st
 
 from src.share.card import (
@@ -36,7 +38,7 @@ ACCENT    = "#FFC24B"        # the one accent for value/score emphasis
 POSITIVE  = "#6FA88C"
 NEGATIVE  = "#C4756A"
 
-FONT_DISPLAY = "'Big Shoulders', 'Arial Narrow', sans-serif"
+FONT_DISPLAY = "'Big Shoulders Display', 'Big Shoulders', 'Arial Narrow', sans-serif"
 FONT_TEXT    = "'Work Sans', -apple-system, 'Segoe UI', sans-serif"
 FONT_MONO    = "'Geist Mono', ui-monospace, 'SFMono-Regular', monospace"
 
@@ -51,6 +53,27 @@ def value_color(v: float) -> str:
     return ACCENT if v >= 0 else FG_MUTED
 
 
+# The display/text/mono faces are declared below in FONT_*, but declaring a
+# family does not LOAD it. Until this link existed the stylesheet asked for
+# 'Big Shoulders' and the browser, never having been given the file, silently
+# fell back to Arial Narrow — so the wordmark had never once rendered in the
+# brand face. The TTFs under static/fonts/ are for PIL (the PNG cards); a browser
+# cannot use them from there, and Streamlit Cloud has no static asset route we
+# can rely on.
+#
+# Google Fonts rather than base64-inlining the bundled TTFs: the three faces are
+# 193 KB each, so inlining would add ~770 KB of base64 to the stylesheet on every
+# render for zero visual gain. The families are identical to the bundled files,
+# so the app and the downloadable cards stay visually in sync.
+_FONT_LINK = (
+    '<link rel="preconnect" href="https://fonts.googleapis.com">'
+    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+    '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
+    'family=Big+Shoulders+Display:wght@400;600;700&'
+    'family=Work+Sans:wght@400;500;600&'
+    'family=Geist+Mono:wght@400;500&display=swap">'
+)
+
 _CSS = f"""
 <style>
 /* ---- Chrome removal -----------------------------------------------------
@@ -61,8 +84,14 @@ _CSS = f"""
 [data-testid="stStatusWidget"] {{ display: none !important; }}
 [data-testid="stToolbarActions"] {{ display: none !important; }}
 
-/* ---- Page rhythm --------------------------------------------------------- */
-.block-container {{ padding-top: 1.2rem; padding-bottom: 4rem; max-width: 1180px; }}
+/* ---- Page rhythm ---------------------------------------------------------
+   Streamlit renders a FIXED toolbar band (~3.75rem) above the app. At the old
+   1.2rem top padding the band sat on top of the first row of content, clipping
+   the wordmark and the season dropdown. The band is emptied by the rules above,
+   so collapse it to zero height AND give the content real room — doing only one
+   of the two leaves either an overlap or a dead gap.                          */
+header[data-testid="stHeader"] {{ height: 0; min-height: 0; background: transparent; }}
+.block-container {{ padding-top: 3.2rem; padding-bottom: 4rem; max-width: 1180px; }}
 
 /* ---- Top navigation ------------------------------------------------------
    Rendered by app.py as st.page_link items inside a container keyed "rl_nav",
@@ -86,13 +115,32 @@ _CSS = f"""
 }}
 [class*="st-key-rl_nav"] [data-testid="stPageLink"] span {{ font-weight: 500; }}
 
-/* ---- App header (brand + global season) ---------------------------------- */
-.rl-brand {{
-    font-family: {FONT_DISPLAY}; font-weight: 700; font-size: 30px;
-    letter-spacing: .01em; color: {FG}; line-height: 1.1; margin: 0;
+/* ---- App header (brand + global season) ----------------------------------
+   Stacked lockup: the league as a small tracked eyebrow over the product name,
+   so "RosterLab" carries the weight and reads as a logo rather than as a line
+   of running text. The eyebrow takes the accent; the name stays white.        */
+.rl-brand-eyebrow {{
+    font-family: {FONT_DISPLAY}; font-weight: 700; font-size: 15px;
+    letter-spacing: .22em; color: {ACCENT}; line-height: 1; margin: 0 0 1px 0;
 }}
-.rl-brand-sub {{
-    font-family: {FONT_TEXT}; font-size: 13px; color: {FG_FAINT}; margin: 2px 0 0 0;
+.rl-brand {{
+    font-family: {FONT_DISPLAY}; font-weight: 700; font-size: 42px;
+    letter-spacing: -.005em; color: {FG}; line-height: 1.02; margin: 0;
+}}
+/* Two-line tagline, below the lockup and the season control so it spans the
+   full width. Line 1 is deliberately smaller than the 42px wordmark: at equal
+   size the two compete and neither reads as the brand.                        */
+.rl-tagline {{
+    font-family: {FONT_DISPLAY}; font-weight: 600; font-size: 22px;
+    color: {FG}; line-height: 1.15; margin: 10px 0 0 0;
+}}
+.rl-tagline-sub {{
+    font-family: {FONT_TEXT}; font-size: 13px; color: {FG_MUTED};
+    margin: 3px 0 0 0; line-height: 1.45;
+}}
+@media (max-width: 700px) {{
+    .rl-brand {{ font-size: 32px; }}
+    .rl-tagline {{ font-size: 18px; }}
 }}
 
 /* ---- Section headers ----------------------------------------------------- */
@@ -100,6 +148,15 @@ _CSS = f"""
     font-family: {FONT_MONO}; font-size: 12px; letter-spacing: .16em;
     text-transform: uppercase; color: {FG_FAINT}; margin: 0 0 6px 0;
 }}
+/* The dated eyebrow on This week — the most prominent thing after the wordmark,
+   because "which week am I looking at?" is the first question a returning
+   visitor has. Larger, accented and more tracked than the section eyebrow.    */
+.rl-eyebrow-hero {{
+    font-family: {FONT_MONO}; font-size: 17px; font-weight: 500;
+    letter-spacing: .14em; text-transform: uppercase; color: {ACCENT};
+    margin: 0 0 10px 0;
+}}
+@media (max-width: 700px) {{ .rl-eyebrow-hero {{ font-size: 14px; letter-spacing: .1em; }} }}
 .rl-h2 {{
     font-family: {FONT_DISPLAY}; font-weight: 700; font-size: 30px;
     color: {FG}; margin: 0 0 2px 0; line-height: 1.15;
@@ -272,8 +329,49 @@ _CSS = f"""
 
 
 def inject() -> None:
-    """Apply the stylesheet. Call once, from the entrypoint, before pages run."""
-    st.markdown(_CSS, unsafe_allow_html=True)
+    """Apply the fonts and the stylesheet. Call once, from the entrypoint.
+
+    st.html, NOT st.markdown(unsafe_allow_html=True). st.markdown runs the string
+    through a Markdown parser before sanitizing it, and the parser mangles CSS:
+    measured in the browser, a 12,775-character stylesheet arrived as 1,149
+    characters, silently truncated at the first multi-line `/* ... */` comment.
+    Everything declared after that point — the nav bar, player rows, the brand
+    lockup, every .rl- class — simply had no styling, with no error raised
+    anywhere and no visible sign except that the page looked wrong.
+
+    st.html inserts the string as raw HTML with no Markdown pass, so the whole
+    stylesheet survives. Two calls (link, then style) rather than one
+    concatenated string: combining them was separately observed to make the
+    sanitizer drop the <style> element entirely.
+    """
+    st.html(_FONT_LINK)
+    st.html(_minify(_CSS))
+
+
+def _minify(css: str) -> str:
+    """Strip comments and force our font sizes to win.
+
+    Comments: dropped because they are for whoever reads this file, not for the
+    browser.
+
+    font-size !important: this is the fix for an app-wide typography bug, not a
+    style preference. Streamlit ships
+
+        .st-emotion-cache-<hash> p, ... {font-size: inherit}
+
+    at specificity (0,1,1). Every text class here is a single class selector at
+    (0,1,0), so Streamlit won every time and each one inherited the container's
+    16px: .rl-h2 section headings rendered at 16px instead of 30, .rl-eyebrow at
+    16 instead of 12, .rl-sub at 16 instead of 14. The designed type hierarchy had
+    never actually reached the page on any <p>-based element; only <div>-based
+    ones such as .rl-footer were unaffected.
+
+    Raising specificity by hand would mean touching every selector and would break
+    again on the next emotion-hash change. Only font-size is contested, so only
+    font-size is forced.
+    """
+    css = _re.sub(r"/\*.*?\*/", "", css, flags=_re.S)
+    return _re.sub(r"font-size:\s*([^;!}]+?)\s*;", r"font-size: \1 !important;", css)
 
 
 # --- Small render helpers (keep HTML out of the page modules) ---------------
@@ -282,14 +380,25 @@ def eyebrow(text: str) -> None:
     st.markdown(f'<p class="rl-eyebrow">{text}</p>', unsafe_allow_html=True)
 
 
+def _bold(text: str) -> str:
+    """Render **emphasis** as <b>, since these strings go out as raw HTML.
+
+    Callers write subtitles in the same Markdown style used everywhere else in
+    the app, but this helper emits HTML directly, so the asterisks were reaching
+    the page literally — "**Positions are left blank**" appeared verbatim on the
+    landing page and on Teams.
+    """
+    return _re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
+
+
 def section(title: str, subtitle: str | None = None, eyebrow_text: str | None = None) -> None:
     """Standard page/section heading: optional eyebrow, title, optional subtitle."""
     html = ""
     if eyebrow_text:
         html += f'<p class="rl-eyebrow">{eyebrow_text}</p>'
-    html += f'<p class="rl-h2">{title}</p>'
+    html += f'<p class="rl-h2">{_bold(title)}</p>'
     if subtitle:
-        html += f'<p class="rl-sub">{subtitle}</p>'
+        html += f'<p class="rl-sub">{_bold(subtitle)}</p>'
     st.markdown(html, unsafe_allow_html=True)
 
 

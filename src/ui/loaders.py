@@ -12,6 +12,8 @@ so cards already rendered by users stay valid.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 import streamlit as st
 
@@ -86,6 +88,32 @@ def snapshot_games_est(snapshot_date: str) -> int:
 def latest_snapshot() -> str | None:
     snaps = list_snapshots(IN_SEASON_YEAR)
     return snaps[-1] if snaps else None
+
+
+# --- Form (rolling recent window) -------------------------------------------
+# Precomputed nightly by scripts/snapshot.py into data/form/. Reading a parquet
+# here rather than calling compute_form keeps the render path free of ASA calls,
+# exactly as the value snapshots already are.
+
+_FORM_DIR = Path(__file__).resolve().parents[2] / "data" / "form"
+
+
+def list_form_dates(season: str = IN_SEASON_YEAR) -> list[str]:
+    prefix = f"form_{season}_"
+    return sorted(p.stem[len(prefix):] for p in _FORM_DIR.glob(f"{prefix}*.parquet"))
+
+
+def latest_form_date(season: str = IN_SEASON_YEAR) -> str | None:
+    dates = list_form_dates(season)
+    return dates[-1] if dates else None
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def load_form(date: str, season: str = IN_SEASON_YEAR) -> pd.DataFrame:
+    path = _FORM_DIR / f"form_{season}_{date}.parquet"
+    if not path.exists():
+        return pd.DataFrame()
+    return pd.read_parquet(path)
 
 
 # --- Insight + card ---------------------------------------------------------

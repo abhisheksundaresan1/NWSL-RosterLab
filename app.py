@@ -27,13 +27,24 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import streamlit as st
 
+# page_title is the question the site answers, not the brand — it is what shows
+# in the browser tab and in a bookmark, where "NWSL RosterLab" tells a first-time
+# visitor nothing.
+#
+# NOTE: this sets the tab title only. It does NOT set the link preview on
+# LinkedIn/Reddit/Slack. Streamlit Community Cloud serves a shell containing
+# `<title>Streamlit</title>` and no og:/twitter: meta tags, and the app is
+# entirely client-rendered — a crawler never runs the JS that applies this. A
+# real link preview needs a custom domain with a static landing page or an edge
+# worker injecting the tags; there is no Streamlit-side fix.
 st.set_page_config(
-    page_title="NWSL RosterLab",
+    page_title="Who's actually performing in the NWSL",
     page_icon="⚽",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
+from src.analytics import track                      # noqa: E402
 from src.ui import state, theme                      # noqa: E402
 from src.ui.pages import (                           # noqa: E402
     this_week, players, teams, prospects, ask, method,
@@ -55,8 +66,8 @@ def _header(season_applies: bool = True) -> None:
     left, right = st.columns([6, 2], vertical_alignment="center")
     with left:
         st.markdown(
-            '<p class="rl-brand">NWSL RosterLab</p>'
-            '<p class="rl-brand-sub">Ranked, plain-English player value</p>',
+            '<p class="rl-brand-eyebrow">NWSL</p>'
+            '<p class="rl-brand">RosterLab</p>',
             unsafe_allow_html=True,
         )
     with right:
@@ -82,6 +93,16 @@ def _header(season_applies: bool = True) -> None:
         if season_applies and choice != current:
             state.set_season(choice)
             st.rerun()
+
+    # Tagline spans the full width BELOW the columns, not inside the left one.
+    # Nested under the wordmark it would be squeezed against the season control
+    # and wrap at ordinary desktop widths.
+    st.markdown(
+        '<p class="rl-tagline">Beyond goals and assists.</p>'
+        '<p class="rl-tagline-sub">Every NWSL player, ranked by what she actually '
+        'adds to her team. Updated weekly.</p>',
+        unsafe_allow_html=True,
+    )
 
 
 def _footer() -> None:
@@ -117,6 +138,13 @@ nav = st.navigation(PAGES, position="hidden")
 
 # The season control drives the NWSL pages only; Prospects is NCAA college data.
 _season_applies = getattr(nav, "url_path", "") != "prospects"
+
+# Analytics. Both calls are internally de-duplicated: session_start fires once
+# per session, page_view only when the slug changes. Streamlit reruns the whole
+# script on every interaction, so an unguarded call here would inflate counts by
+# an order of magnitude. Both are no-ops when POSTHOG_API_KEY is unset.
+track.start_session()
+track.page_view(getattr(nav, "url_path", "") or "this-week")
 
 _header(season_applies=_season_applies)
 

@@ -13,6 +13,7 @@ small-sample player can't top the risers list on noise.
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -37,6 +38,25 @@ def list_snapshots(season: str = "2026") -> list[str]:
         for p in _SNAP_DIR.glob(f"{prefix}*.parquet")
     ]
     return sorted(dates)
+
+
+def snapshot_on_or_before(target: date | str, season: str = "2026") -> str | None:
+    """Latest snapshot date at or before `target`, or None if there is none.
+
+    This is the app's ONLY way to reach back in time, and it exists to keep the
+    snapshot CADENCE decoupled from any comparison WINDOW. Selecting a snapshot
+    positionally (`snaps[-N]`) silently redefines every window the moment the cron
+    changes: with weekly snapshots `snaps[-5]` meant "about a month ago", and the
+    day the cron went daily the same expression started meaning "five days ago" —
+    no error, no visible symptom, just a different product.
+
+    Addressing by DATE makes that class of bug impossible: pulling hourly, daily
+    or weekly cannot change what "30 days ago" resolves to, only how precisely it
+    can be hit.
+    """
+    want = target.isoformat() if isinstance(target, date) else str(target)
+    earlier = [d for d in list_snapshots(season) if d <= want]
+    return earlier[-1] if earlier else None
 
 
 def load_snapshot(date: str, season: str = "2026") -> pd.DataFrame:

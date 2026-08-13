@@ -13,10 +13,15 @@ data/raw/
 data/processed/
 *.parquet
 
-# Phase B: 2026 in-season snapshots ARE committed — they seed Risers & Fallers
-# history and are the output the weekly GitHub Action commits.
+# 2026 in-season snapshots ARE committed — they seed movement history and are
+# the output the daily GitHub Action commits.
 !data/snapshots/
 !data/snapshots/*.parquet
+
+# Same for the rolling form windows: the app READS these at render time, so if
+# they are not committed the deployed site has no form data at all.
+!data/form/
+!data/form/*.parquet
 
 # Claude Code session files
 .claude/
@@ -25,3 +30,6 @@ data/processed/
 .DS_Store
 .ipynb_checkpoints/
 .vscode/
+
+# Streamlit local secrets (PostHog key etc.) — never commit
+.streamlit/secrets.toml

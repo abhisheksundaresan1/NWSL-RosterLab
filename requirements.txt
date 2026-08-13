@@ -28,3 +28,4 @@ python-dotenv==1.2.2
 
 # Storage (parquet cache)
 pyarrow==24.0.0
+posthog==7.38.6

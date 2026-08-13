@@ -83,6 +83,7 @@ def fetch_player_goals_added(
     season_name: str | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
+    split_by_games: bool = False,
 ) -> pd.DataFrame:
     """NWSL player goals added (g+) data (cached to data/raw).
 
@@ -93,10 +94,19 @@ def fetch_player_goals_added(
 
     None of the three → all seasons aggregated.
 
+    split_by_games=True returns ONE ROW PER PLAYER PER MATCH, with a `game_id`
+    column, instead of one aggregated row per player. The form metric uses it to
+    count matches exactly. This matters because NWSL match days are usually
+    doubleheaders — 38 of the 53 match days in 2026 carry more than one fixture —
+    so a date window alone cannot tell you how many matches a player actually
+    featured in, and minutes/90 only estimates it.
+
     Cache key encodes whichever mode is used so windows don't collide:
       season_name="2025"                      -> nwsl_player_goals_added_2025.parquet
       start=2026-03-13, end=2026-06-20         -> nwsl_player_goals_added_2026-03-13_2026-06-20.parquet
       neither                                  -> nwsl_player_goals_added_all.parquet
+    A "_bygame" suffix is appended when split_by_games=True, so the per-match and
+    aggregated pulls for the same window never overwrite each other.
     """
     if season_name and (start_date or end_date):
         raise ValueError("Pass either season_name OR start_date/end_date, not both (ASA restriction).")
@@ -114,6 +124,10 @@ def fetch_player_goals_added(
     else:
         suffix = "all"
         kwargs = {}
+
+    if split_by_games:
+        kwargs["split_by_games"] = True
+        suffix += "_bygame"
 
     path = _cache_path(f"nwsl_player_goals_added_{suffix}")
     if path.exists() and not refresh:

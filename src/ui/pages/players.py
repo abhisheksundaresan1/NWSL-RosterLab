@@ -20,6 +20,7 @@ import streamlit as st
 
 from src.analysis.ranking import rank_by_position, validate_value_table
 from src.analysis.season import IN_SEASON_YEAR
+from src.analytics import track
 from src.ui import components as c
 from src.ui import loaders, state, theme
 
@@ -198,10 +199,12 @@ def _player_detail(row: pd.Series, cohort: pd.DataFrame, season: str,
             st.rerun()
     card_bytes = st.session_state.get(card_key)
     if card_bytes:
-        st.download_button(
+        if st.download_button(
             "⬇ Download card (PNG)", data=card_bytes,
             file_name=f"{str(name).replace(' ', '_')}_{season}_nwsl_rosterlab.png",
             mime="image/png", key=f"dl_{name}_{season}",
-        )
+        ):
+            track.card_download("player", player=str(name), season=season,
+                                position=position)
     elif card_key in st.session_state:
         st.caption("Card unavailable for this player.")

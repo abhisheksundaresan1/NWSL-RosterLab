@@ -27,7 +27,9 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from src.analysis.movement import list_snapshots, load_snapshot, compute_movement
+from src.analysis.form import (
+    FORM_WINDOW_DAYS, K_FORM, MIN_MINUTES_FORM, MIN_COHORT_FOR_RANK,
+)
 from src.analysis.ranking import rank_by_position
 from src.analysis.season import IN_SEASON_YEAR
 from src.ui import components as c
@@ -35,8 +37,6 @@ from src.ui import loaders, state, theme
 from src.ui.pages.players import POSITION_LABELS, POSITION_ORDER, _player_detail
 
 DEPTH_MIN_MINUTES = 1        # effectively "anyone with recorded minutes"
-MOVE_WINDOW = 5
-MOVE_MIN_MINUTES = 270
 THIN_DEPTH = 2               # positions at or below this are flagged
 
 
@@ -98,12 +98,12 @@ def render() -> None:
     _depth(depth)
     theme.rule()
     if in_season:
-        _movement(chosen)
+        _form(chosen)
         theme.rule()
     else:
         st.caption(
-            f"Week-to-week movement needs the live season's weekly snapshots — "
-            f"switch to {IN_SEASON_YEAR} to see risers and fallers."
+            f"Form covers the last {FORM_WINDOW_DAYS} days of the live season — "
+            f"switch to {IN_SEASON_YEAR} to see it."
         )
         theme.rule()
     _squad(squad, squad_table, season, qual_min)
@@ -179,7 +179,13 @@ def _depth(depth: pd.DataFrame) -> None:
     for col, pos in zip(cols, POSITION_ORDER):
         at_pos = depth[depth["position"] == pos]
         n = len(at_pos)
-        best = at_pos.nlargest(1, "value_score")["player_name"].iloc[0] if n else None
+        # pd.notna guard: some ASA player_ids have no name in the players
+        # reference, and a NaN here rendered as the literal string "nan" in the
+        # depth cell.
+        best = None
+        if n:
+            top_name = at_pos.nlargest(1, "value_score")["player_name"].iloc[0]
+            best = top_name if pd.notna(top_name) else None
         thin = " rl-depth-thin" if n <= THIN_DEPTH else ""
         with col:
             st.markdown(
@@ -199,46 +205,77 @@ def _depth(depth: pd.DataFrame) -> None:
 
 # --- Movement ---------------------------------------------------------------
 
-def _movement(abbr: str) -> None:
-    theme.section("Recent movement",
-                  subtitle="Value-score change over roughly the last month.")
-    snaps = list_snapshots(IN_SEASON_YEAR)
-    if len(snaps) < 2:
-        c.empty_state("Needs a second week of data to compare.")
-        return
+def _form(abbr: str) -> None:
+    """This club's form over the last FORM_WINDOW_DAYS — a level, then a change.
 
-    mv = compute_movement(
-        load_snapshot(snaps[-1]), load_snapshot(snaps[max(0, len(snaps) - MOVE_WINDOW)]),
-        K=300, min_minutes_new=MOVE_MIN_MINUTES,
+    Same metric and same constants as This week; the only difference is the
+    filter to one club. Deliberately NOT the season value score, and never
+    differenced against it.
+    """
+    theme.section(
+        f"Form · last {FORM_WINDOW_DAYS} days",
+        subtitle=(f"Weighted goals added per 90 over the last {FORM_WINDOW_DAYS} days "
+                  f"only, for players with {MIN_MINUTES_FORM}+ minutes in that window. "
+                  f"A separate metric from the season value score above."),
     )
-    mv = mv[mv["team_abbreviation"] == abbr] if not mv.empty else mv
-    if mv.empty:
-        c.empty_state("No player at this club clears the minutes threshold yet.")
+
+    form_date = loaders.latest_form_date()
+    form = loaders.load_form(form_date) if form_date else pd.DataFrame()
+    if form.empty:
+        c.empty_state(f"No form data yet for {IN_SEASON_YEAR}.")
         return
 
-    up, down = st.columns(2)
-    with up:
-        st.caption("**Rising**")
-        risers = mv[mv["delta_value_score"] > 0].head(3)
-        if risers.empty:
-            st.caption("Nobody at this club has risen this month.")
-        for _, r in risers.iterrows():
-            _mover(r, theme.POSITIVE)
-    with down:
-        st.caption("**Falling**")
-        fallers = mv[mv["delta_value_score"] < 0].tail(3).iloc[::-1]
-        if fallers.empty:
-            st.caption("Nobody at this club has fallen this month.")
-        for _, r in fallers.iterrows():
-            _mover(r, theme.NEGATIVE)
+    mine = form[form["team_abbreviation"] == abbr]
+    if mine.empty:
+        c.empty_state(
+            f"Nobody at this club has {MIN_MINUTES_FORM}+ minutes in the last "
+            f"{FORM_WINDOW_DAYS} days."
+        )
+        return
+
+    best, movers = st.columns(2)
+    with best:
+        st.caption(f"**In form** · best {FORM_WINDOW_DAYS}-day rate")
+        for _, r in mine.nlargest(3, "form_weighted_p90").iterrows():
+            _form_row(r, f"{r['form_weighted_p90']:.2f} g+/90", theme.POSITIVE)
+    with movers:
+        st.caption(f"**Change** vs the previous {FORM_WINDOW_DAYS} days")
+        moved = mine.dropna(subset=["form_delta"])
+        if moved.empty:
+            st.caption(
+                f"No player here clears {MIN_MINUTES_FORM} minutes in both windows, "
+                f"so there is no comparable change to show."
+            )
+        else:
+            for _, r in moved.reindex(
+                moved["form_delta"].abs().sort_values(ascending=False).index
+            ).head(3).iterrows():
+                colour = theme.POSITIVE if r["form_delta"] > 0 else theme.NEGATIVE
+                _form_row(r, f"{r['form_delta']:+.2f} g+/90", colour)
+
+    st.caption(
+        f"Form is shrunk toward the position average with K = {K_FORM} minutes. "
+        f"Ranks are within position across the league, and a position with fewer than "
+        f"{MIN_COHORT_FOR_RANK} qualifying players this window is shown as a rate only."
+    )
 
 
-def _mover(row: pd.Series, colour: str) -> None:
+def _form_row(row: pd.Series, value_text: str, colour: str) -> None:
+    """One player line: position, sample size, cohort, then the rate."""
+    cohort = row.get("form_cohort_n")
+    rank = row.get("form_rank")
+    if pd.notna(rank) and pd.notna(cohort):
+        place = f"  ·  #{int(rank)} of {int(cohort)} {row['position']}s"
+    else:
+        # Below MIN_COHORT_FOR_RANK: a z-score over a handful of players is not a
+        # ranking, so no rank and no score are shown — only the rate and sample.
+        place = f"  ·  too few {row['position']}s to rank"
     st.markdown(
         f'<div class="rl-metric" style="margin-bottom:6px">'
-        f'<p class="rl-metric-k">{c._esc(row["position"])}  ·  {c._esc(row["sample_label"])}</p>'
+        f'<p class="rl-metric-k">{c._esc(row["position"])}  ·  '
+        f'{c._esc(row["form_sample_label"])}{c._esc(place)}</p>'
         f'<p class="rl-metric-v">{c._esc(row["player_name"])} '
-        f'<span style="color:{colour}">{row["delta_value_score"]:+.2f}</span></p>'
+        f'<span style="color:{colour}">{c._esc(value_text)}</span></p>'
         f'</div>',
         unsafe_allow_html=True,
     )

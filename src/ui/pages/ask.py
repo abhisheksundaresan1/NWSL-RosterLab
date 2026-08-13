@@ -21,6 +21,7 @@ import streamlit as st
 
 from src.agent.canned import CANNED_SEARCHES, run_canned
 from src.agent.scout import check_rate_limit, get_cached, run_scout_query
+from src.analytics import track
 from src.ui import components as c
 from src.ui import state, theme
 
@@ -72,6 +73,8 @@ def render() -> None:
                 if st.button(f"{search['icon']} {search['label']}",
                              key=f"canned_{i}", width="stretch"):
                     df, description = run_canned(search["label"], season, min_minutes)
+                    track.ask_query("canned", query=search["label"],
+                                    results=int(len(df)) if df is not None else 0)
                     st.session_state[_RESULT_KEY] = {
                         "kind": "table", "title": search["label"],
                         "caption": description, "payload": df,
@@ -82,6 +85,9 @@ def render() -> None:
     pending = st.session_state.pop(_PENDING_KEY, None)
     to_run = pending or (query.strip() if submitted else None)
     if to_run:
+        # "typed" covers both a fresh question and a cache hit — the visitor asked
+        # either way, and conflating them would hide real demand.
+        track.ask_query("typed", query=to_run)
         cached = get_cached(to_run)
         if cached:
             st.session_state[_RESULT_KEY] = {

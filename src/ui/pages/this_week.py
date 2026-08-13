@@ -30,60 +30,71 @@ from src.analysis.drops import (
     select_undervalued_xi, best_xi_excluded_names, undervalued_min_minutes,
 )
 from src.analysis.movement import (
-    list_snapshots, load_snapshot, compute_movement, select_risers_xi, select_fallers_xi,
+    list_snapshots, load_snapshot, select_risers_xi, select_fallers_xi,
+)
+from src.analysis.form import (
+    FORM_WINDOW_DAYS, K_FORM, MIN_MINUTES_FORM, SMALL_COHORT, MIN_COHORT_FOR_RANK,
+    form_as_card_rows, dominant_action,
 )
 from src.analysis.newcomers import select_newcomer_watch_xi
 from src.analysis.season import IN_SEASON_YEAR
 from src.share.card import render_leaderboard_card
+from src.analytics import track
 from src.ui import components as c
 from src.ui import loaders, state, theme
 
+from datetime import date as _date
 
-MOVE_WINDOW = 5          # snapshots back for the "this month" comparison
-MOVE_MIN_MINUTES = 270   # ~3 games; matches the Risers & Fallers floor
+MOVE_MIN_MINUTES = 270   # newcomer-table floor (~3 games)
+
+# One sentence, reused wherever a form number appears, so the parameters travel
+# with the metric instead of living only in the Method page or in code.
+FORM_DISCLOSURE = (
+    f"**Form** covers the last **{FORM_WINDOW_DAYS} days only**, for players with at "
+    f"least **{MIN_MINUTES_FORM} minutes** in that window (about two full matches), "
+    f"shrunk toward the position average with **K = {K_FORM} minutes**. It is a "
+    f"separate metric from the season value score — the two are never combined."
+)
+
+
+def _human_date(iso: str | None) -> str:
+    """'2026-08-10' -> 'AUGUST 10'. Avoids %-d/%#d, which differ across platforms."""
+    if not iso:
+        return ""
+    d = _date.fromisoformat(iso)
+    return f"{d:%B} {d.day}".upper()
 
 
 def render() -> None:
     snaps = list_snapshots(IN_SEASON_YEAR)
     latest = snaps[-1] if snaps else None
 
-    theme.section(
-        "This week",
-        eyebrow_text=(f"NWSL {IN_SEASON_YEAR} · WEEK OF {latest}" if latest
-                      else "NWSL ROSTERLAB"),
+    form_date = loaders.latest_form_date()
+    form = loaders.load_form(form_date) if form_date else pd.DataFrame()
+
+    # The dated eyebrow leads the page — a returning visitor's first question is
+    # which week they are looking at.
+    st.markdown(
+        f'<p class="rl-eyebrow-hero">NWSL {IN_SEASON_YEAR} · WEEK OF '
+        f'{_human_date(form_date or latest)}</p>' if (form_date or latest) else
+        '<p class="rl-eyebrow-hero">NWSL ROSTERLAB</p>',
+        unsafe_allow_html=True,
     )
 
-    movement = _movement(snaps)
     newcomers = _newcomer_table(latest)
 
-    _headline(movement, newcomers, latest)
-    _headline_figures(movement, newcomers, snaps)
+    _headline(form, newcomers)
+    _headline_figures(form, newcomers, snaps)
 
-    if len(snaps) >= 2:
+    if not form.empty:
         theme.rule()
-        _risers_and_fallers(snaps)
+        _form_cards(form, form_date)
     if snaps:
         theme.rule()
         _newcomers(snaps[-1])
 
     theme.rule()
     _undervalued_xi()
-
-
-# --- Shared data for the headline + figures ---------------------------------
-
-@st.cache_data(show_spinner=False, ttl=3600)
-def _movement_cached(snap_new: str, snap_old: str, min_minutes: int) -> pd.DataFrame:
-    return compute_movement(load_snapshot(snap_new), load_snapshot(snap_old),
-                            K=300, min_minutes_new=min_minutes)
-
-
-def _movement(snaps: list[str]) -> pd.DataFrame:
-    """Movement over roughly the last month, or an empty frame if impossible."""
-    if len(snaps) < 2:
-        return pd.DataFrame()
-    return _movement_cached(snaps[-1], snaps[max(0, len(snaps) - MOVE_WINDOW)],
-                            MOVE_MIN_MINUTES)
 
 
 def _newcomer_table(latest: str | None) -> pd.DataFrame:
@@ -97,36 +108,60 @@ def _newcomer_table(latest: str | None) -> pd.DataFrame:
 
 # --- Headline ---------------------------------------------------------------
 
-def _headline(movement: pd.DataFrame, newcomers: pd.DataFrame,
-              latest: str | None) -> None:
+_ACTION_PHRASE = {
+    "shooting": "her shooting", "dribbling": "her dribbling", "passing": "her passing",
+    "receiving": "her movement to receive", "interrupting": "defensive actions",
+    "fouling": "the fouls she draws",
+}
+
+
+def _headline(form: pd.DataFrame, newcomers: pd.DataFrame) -> None:
     """One plain-English sentence about the football.
 
-    Deliberately says nothing about snapshots or pipelines — this is the most
-    read line on the site. Degrades clause by clause rather than all-or-nothing.
+    HARD RULE: every clause is computed from columns we hold. This page has no
+    access to fixtures, opponents, scorelines or goals, and no LLM is involved,
+    so the sentence cannot reference them. The only texture it adds beyond names
+    and numbers is WHICH ACTION TYPE drove a player's form — which is derived
+    arithmetic on ga_*_p90, not narration.
+
+    Units are stated ("0.31 g+/90") because form is a rate, not the z-scored
+    value points used elsewhere. Degrades clause by clause.
     """
     parts: list[str] = []
-    if not movement.empty:
-        top = movement.iloc[0]
+
+    if not form.empty:
+        top = form.nlargest(1, "form_weighted_p90").iloc[0]
+        action = dominant_action(top)
+        tail = f" — driven mostly by {_ACTION_PHRASE[action]}" if action else ""
         parts.append(
-            f"<b>{top['player_name']}</b> is the league's biggest riser this month, "
-            f"up {abs(top['delta_value_score']):.2f}."
+            f"<b>{top['player_name']}</b> has been the league's best performer over the "
+            f"last {FORM_WINDOW_DAYS} days at {top['form_weighted_p90']:.2f} g+/90"
+            f"{tail}, across {int(top['form_matches'])} matches."
         )
-        bottom = movement.iloc[-1]
-        if float(bottom["delta_value_score"]) < 0:
-            parts.append(
-                f"<b>{bottom['player_name']}</b> has fallen furthest, "
-                f"down {abs(bottom['delta_value_score']):.2f}."
-            )
+
+        movers = form.dropna(subset=["form_delta"])
+        risers = movers[movers["form_delta"] > 0] if not movers.empty else movers
+        if not risers.empty:
+            r = risers.nlargest(1, "form_delta").iloc[0]
+            if r["player_id"] == top["player_id"]:
+                # Same player tops both. Say so once rather than opening a second
+                # sentence with a name the reader just read.
+                parts.append(
+                    f"She has also improved most on the previous {FORM_WINDOW_DAYS} "
+                    f"days, up {abs(r['form_delta']):.2f} g+/90."
+                )
+            else:
+                parts.append(
+                    f"<b>{r['player_name']}</b> has improved most on the previous "
+                    f"{FORM_WINDOW_DAYS} days, up {abs(r['form_delta']):.2f} g+/90."
+                )
+
     if not newcomers.empty:
         first = newcomers.iloc[0]
         parts.append(
-            f"<b>{first['player_name']}</b> leads all first-year players "
-            f"at {first['value_score']:+.2f}."
+            f"<b>{first['player_name']}</b> leads all first-year players on season "
+            f"value at {first['value_score']:+.2f}."
         )
-
-    games = loaders.snapshot_games_est(latest) if latest else None
-    if games:
-        parts.append(f"About {games} games played so far.")
 
     if not parts:
         parts.append("The season is under way — check back once a few more games are in.")
@@ -134,30 +169,35 @@ def _headline(movement: pd.DataFrame, newcomers: pd.DataFrame,
     st.markdown(f'<p class="rl-lede">{" ".join(parts)}</p>', unsafe_allow_html=True)
 
 
-def _headline_figures(movement: pd.DataFrame, newcomers: pd.DataFrame,
+def _headline_figures(form: pd.DataFrame, newcomers: pd.DataFrame,
                       snaps: list[str]) -> None:
     """Three figures, each computed and failing independently."""
-    col_r, col_f, col_n = st.columns(3)
+    col_b, col_r, col_n = st.columns(3)
 
-    with col_r:
-        if movement.empty:
-            c.stat_card_empty("Biggest riser", _why_no_movement(snaps))
+    with col_b:
+        if form.empty:
+            c.stat_card_empty("Best form", _why_no_form(snaps))
         else:
-            r = movement.iloc[0]
-            c.stat_card("Biggest riser", str(r["player_name"]),
-                        f"{r['delta_value_score']:+.2f}  ·  {r['team_name']}",
+            b = form.nlargest(1, "form_weighted_p90").iloc[0]
+            c.stat_card("Best form", str(b["player_name"]),
+                        f"{b['form_weighted_p90']:.2f} g+/90  ·  {b['form_sample_label']}",
                         accent=theme.POSITIVE)
 
-    with col_f:
-        fallers = movement[movement["delta_value_score"] < 0] if not movement.empty else movement
-        if fallers.empty:
-            c.stat_card_empty("Biggest faller", _why_no_movement(snaps)
-                              if movement.empty else "No player has fallen this month.")
+    with col_r:
+        movers = form.dropna(subset=["form_delta"]) if not form.empty else form
+        risers = movers[movers["form_delta"] > 0] if not movers.empty else movers
+        if risers.empty:
+            c.stat_card_empty(
+                "Most improved",
+                _why_no_form(snaps) if form.empty else
+                f"Nobody has {MIN_MINUTES_FORM}+ minutes in both this window and the "
+                f"previous one — the calendar between them was mostly a break."
+            )
         else:
-            f = fallers.iloc[-1]
-            c.stat_card("Biggest faller", str(f["player_name"]),
-                        f"{f['delta_value_score']:+.2f}  ·  {f['team_name']}",
-                        accent=theme.NEGATIVE)
+            r = risers.nlargest(1, "form_delta").iloc[0]
+            c.stat_card("Most improved", str(r["player_name"]),
+                        f"{r['form_delta']:+.2f} g+/90  ·  {r['team_name']}",
+                        accent=theme.POSITIVE)
 
     with col_n:
         if newcomers.empty:
@@ -165,24 +205,50 @@ def _headline_figures(movement: pd.DataFrame, newcomers: pd.DataFrame,
         else:
             n = newcomers.iloc[0]
             c.stat_card("Top newcomer", str(n["player_name"]),
-                        f"{n['value_score']:+.2f}  ·  {n['team_name']}")
+                        f"{n['value_score']:+.2f} season value  ·  {n['team_name']}")
 
-    # The floor behind all three figures, stated where the figures are rather
-    # than only in the Risers & Fallers section further down.
+    _form_caption(form)
+
+
+def _form_caption(form: pd.DataFrame) -> None:
+    """The parameters, the sample, and the cohort caveat — with the numbers."""
+    st.caption(FORM_DISCLOSURE)
+    if form.empty:
+        return
+
+    n_cur = int(form["form_fixtures"].iloc[0])
+    n_prev = int(form["prev_fixtures"].iloc[0])
     st.caption(
-        f"Riser and faller compare the latest weekly snapshot with roughly a month "
-        f"earlier, counting only players with at least **{MOVE_MIN_MINUTES} minutes** "
-        f"(about three matches) in the latest snapshot. Value scores are shrunk "
-        f"toward the position mean (K = 300) and are not comparable across seasons."
+        f"This window covers **{n_cur} fixtures**; the previous {FORM_WINDOW_DAYS} days "
+        f"covered **{n_prev}**. Change is shown only for players clearing the minutes "
+        f"floor in *both*, so an international break leaves most players without one."
     )
 
+    thin = (
+        form[["position", "form_cohort_n"]].drop_duplicates()
+        .query(f"form_cohort_n <= {SMALL_COHORT}").sort_values("form_cohort_n")
+    )
+    if not thin.empty:
+        bits = ", ".join(f"{r.position} ({int(r.form_cohort_n)})" for r in thin.itertuples())
+        suppressed = thin[thin["form_cohort_n"] < MIN_COHORT_FOR_RANK]
+        note = (
+            f"Thin cohorts this window — {bits}. A form score is standardised against "
+            f"the players at that position who clear the floor, so with a small group "
+            f"treat the ranking as indicative."
+        )
+        if not suppressed.empty:
+            note += (
+                f" Positions with fewer than {MIN_COHORT_FOR_RANK} qualifiers show a rate "
+                f"and sample size only — no rank or score is published for them."
+            )
+        st.caption(note)
 
-def _why_no_movement(snaps: list[str]) -> str:
+
+def _why_no_form(snaps: list[str]) -> str:
     if not snaps:
         return "No in-season data yet."
-    if len(snaps) < 2:
-        return "Needs a second week of data to compare."
-    return "No player clears the minutes threshold yet."
+    return (f"No player has {MIN_MINUTES_FORM}+ minutes in the last "
+            f"{FORM_WINDOW_DAYS} days yet.")
 
 
 # --- Undervalued XI ---------------------------------------------------------
@@ -229,10 +295,11 @@ def _undervalued_xi() -> None:
     with img_col:
         st.image(png, width="stretch")
     with meta_col:
-        st.download_button(
+        if st.download_button(
             "⬇ Download PNG", data=png, file_name=f"undervalued_xi_{season}.png",
             mime="image/png", key="dl_undervalued_xi",
-        )
+        ):
+            track.card_download("undervalued_xi", season=season)
         _stats_table(rows)
         with st.expander(f"Who was excluded ({season} Best XI)", expanded=False):
             first, second = best_xi_excluded_names(season)
@@ -242,53 +309,94 @@ def _undervalued_xi() -> None:
 
 # --- Risers & Fallers -------------------------------------------------------
 
-def _risers_and_fallers(snaps: list[str]) -> None:
-    old_idx = max(0, len(snaps) - 5)
-    snap_new, snap_old = snaps[-1], snaps[old_idx]
-    weeks = (len(snaps) - 1) - old_idx
-    min_minutes = max(270, state.get_min_minutes(IN_SEASON_YEAR))
+def _form_cards(form: pd.DataFrame, form_date: str | None) -> None:
+    """In-form XI, plus risers/fallers when a comparable previous window exists.
 
+    The level ("who is playing best right now") leads, because it is always
+    computable. The change is secondary and genuinely unavailable across an
+    international break — rather than fabricate one, the section says so.
+    """
     theme.section(
-        "Risers & Fallers",
-        subtitle=(f"Value-score movement from {snap_old} to {snap_new} (~{weeks} week"
-                  f"{'s' if weeks != 1 else ''}). Minimum {min_minutes:,} minutes in the "
-                  "latest snapshot; scores stabilized so a small sample can't fake a surge."),
+        f"In form · last {FORM_WINDOW_DAYS} days",
+        subtitle=(f"Position-weighted goals added per 90 over the last {FORM_WINDOW_DAYS} "
+                  f"days only — not the season score. Minimum {MIN_MINUTES_FORM} minutes "
+                  f"in the window; shrunk toward the position average (K = {K_FORM})."),
         eyebrow_text=f"NWSL {IN_SEASON_YEAR} · IN PROGRESS",
     )
 
-    key = f"drops_rf_{snap_new}_{snap_old}_{min_minutes}_v1"
+    key = f"form_cards_{form_date}_v1"
     if key not in st.session_state:
-        with st.spinner("Computing movement…"):
-            mv = compute_movement(
-                load_snapshot(snap_new), load_snapshot(snap_old),
-                K=300, min_minutes_new=min_minutes,
-            )
-            rise, fall = select_risers_xi(mv), select_fallers_xi(mv)
-            win = f"vs {snap_old}  ·  ~{weeks}w"
+        with st.spinner("Building form XI…"):
+            best_rows = select_risers_xi(form_as_card_rows(form, "form_weighted_p90"))
             st.session_state[key] = (
+                render_leaderboard_card(
+                    best_rows, title="In form", season=IN_SEASON_YEAR,
+                    subtitle=f"Weighted g+/90 · last {FORM_WINDOW_DAYS} days · outfield only",
+                ),
+                best_rows,
+            )
+
+    png, rows = st.session_state[key]
+    img_col, meta_col = st.columns([3, 2])
+    with img_col:
+        st.image(png, width="stretch")
+    with meta_col:
+        if st.download_button("⬇ Download PNG", data=png,
+                              file_name=f"in_form_{IN_SEASON_YEAR}_{form_date}.png",
+                              mime="image/png", key="dl_in_form"):
+            track.card_download("in_form", season=IN_SEASON_YEAR, window=form_date)
+        _stats_table(rows, value_label="g+/90")
+
+    movers = form.dropna(subset=["form_delta"])
+    if movers.empty:
+        st.caption(
+            f"**No risers and fallers this window.** Form change needs "
+            f"{MIN_MINUTES_FORM}+ minutes in both this window and the previous "
+            f"{FORM_WINDOW_DAYS} days, and no player clears that on both sides of the "
+            f"break in the calendar. It returns once two full windows of fixtures line up."
+        )
+        return
+
+    theme.rule()
+    theme.section(
+        "Risers & Fallers",
+        subtitle=(f"Change in weighted g+/90 against the previous {FORM_WINDOW_DAYS} days, "
+                  f"for the {len(movers)} players who clear {MIN_MINUTES_FORM} minutes in "
+                  f"both windows. This is a change in rate — the season value score "
+                  f"is a separate number and is not involved."),
+    )
+    rkey = f"form_rf_{form_date}_v1"
+    if rkey not in st.session_state:
+        with st.spinner("Computing form change…"):
+            adapted = form_as_card_rows(movers, "form_delta")
+            rise, fall = select_risers_xi(adapted), select_fallers_xi(adapted)
+            win = f"vs previous {FORM_WINDOW_DAYS} days"
+            st.session_state[rkey] = (
                 render_leaderboard_card(rise, title="Risers", season=IN_SEASON_YEAR,
-                                        subtitle=f"Biggest value-score gains  ·  {win}"),
+                                        subtitle=f"Biggest g+/90 gains  ·  {win}"),
                 render_leaderboard_card(fall, title="Fallers", season=IN_SEASON_YEAR,
-                                        subtitle=f"Biggest value-score drops  ·  {win}"),
+                                        subtitle=f"Biggest g+/90 drops  ·  {win}"),
                 rise, fall,
             )
 
-    rise_png, fall_png, rise_rows, fall_rows = st.session_state[key]
+    rise_png, fall_png, rise_rows, fall_rows = st.session_state[rkey]
     left, right = st.columns(2)
     with left:
         st.caption("**Risers**")
         st.image(rise_png, width="stretch")
-        st.download_button("⬇ Risers (PNG)", data=rise_png,
-                           file_name=f"risers_{IN_SEASON_YEAR}_{snap_new}.png",
-                           mime="image/png", key="dl_risers")
-        _stats_table(rise_rows, value_label="Δ value")
+        if st.download_button("⬇ Risers (PNG)", data=rise_png,
+                              file_name=f"risers_{IN_SEASON_YEAR}_{form_date}.png",
+                              mime="image/png", key="dl_risers"):
+            track.card_download("risers", season=IN_SEASON_YEAR, window=form_date)
+        _stats_table(rise_rows, value_label="Δ g+/90")
     with right:
         st.caption("**Fallers**")
         st.image(fall_png, width="stretch")
-        st.download_button("⬇ Fallers (PNG)", data=fall_png,
-                           file_name=f"fallers_{IN_SEASON_YEAR}_{snap_new}.png",
-                           mime="image/png", key="dl_fallers")
-        _stats_table(fall_rows, value_label="Δ value")
+        if st.download_button("⬇ Fallers (PNG)", data=fall_png,
+                              file_name=f"fallers_{IN_SEASON_YEAR}_{form_date}.png",
+                              mime="image/png", key="dl_fallers"):
+            track.card_download("fallers", season=IN_SEASON_YEAR, window=form_date)
+        _stats_table(fall_rows, value_label="Δ g+/90")
 
 
 # --- Newcomer Watch ---------------------------------------------------------
@@ -325,9 +433,10 @@ def _newcomers(latest_snap: str) -> None:
     with img_col:
         st.image(png, width="stretch")
     with meta_col:
-        st.download_button("⬇ Download PNG", data=png,
-                           file_name=f"newcomers_{IN_SEASON_YEAR}_{latest_snap}.png",
-                           mime="image/png", key="dl_newcomers")
+        if st.download_button("⬇ Download PNG", data=png,
+                              file_name=f"newcomers_{IN_SEASON_YEAR}_{latest_snap}.png",
+                              mime="image/png", key="dl_newcomers"):
+            track.card_download("newcomers", season=IN_SEASON_YEAR)
         _stats_table(rows)
 
 
