@@ -42,20 +42,25 @@
       }
 
       function resolveId() {
-        var id = null;
+        // Returns {id, persistent}. `persistent: false` means storage is
+        // unavailable, so this id lasts only for the page load: the visit is
+        // counted, but as a NEW visitor, and it can never be seen returning.
+        // Reporting that honestly is what lets the blind spot be measured
+        // instead of guessed. Never fingerprint to recover it.
         try {
-          id = window.localStorage.getItem(KEY);
+          var id = window.localStorage.getItem(KEY);
           if (!id) {
             id = uuid();
             window.localStorage.setItem(KEY, id);
+            // Read back: some browsers accept the write and discard it.
+            if (window.localStorage.getItem(KEY) !== id) {
+              return { id: id, persistent: false };
+            }
           }
+          return { id: id, persistent: true };
         } catch (e) {
-          // Storage blocked (private mode with storage disabled, or a strict
-          // policy). Fall back to a per-load id: this visit counts as new,
-          // which is the honest outcome. Never fingerprint to recover it.
-          id = id || uuid();
+          return { id: uuid(), persistent: false };
         }
-        return id;
       }
 
       function clearLegacyCookie() {
@@ -71,9 +76,11 @@
 
       function onRender() {
         clearLegacyCookie();
-        var id = resolveId();
+        var r = resolveId();
         send("streamlit:setFrameHeight", { height: 0 });
-        send("streamlit:setComponentValue", { value: id, dataType: "json" });
+        send("streamlit:setComponentValue", {
+          value: { id: r.id, persistent: r.persistent }, dataType: "json"
+        });
       }
 
       // Streamlit re-sends RENDER on every rerun; resolving is idempotent because

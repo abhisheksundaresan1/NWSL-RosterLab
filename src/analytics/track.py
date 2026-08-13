@@ -59,6 +59,26 @@ derived from IP or user-agent. `st.context.ip_address` is never read, and no IP
 is sent to PostHog. If storage is blocked the visit counts as new — an accepted,
 stated undercount rather than a reason to fingerprint.
 
+LIMITS ON RETURNING-VISITOR COUNTS (both understate, never overstate)
+=====================================================================
+1. Storage blocked or cleared -> the visit is still counted, under an id that
+   lasts one page load, tagged `id_type: "ephemeral"`. Compare that share
+   against "persistent" to size the blind spot instead of guessing at it.
+
+2. Safari caps script-writable storage at 7 days. localStorage written by
+   JavaScript — which is what this is — falls under Intelligent Tracking
+   Prevention's cap: if a Safari user does not visit the site as a first party
+   within 7 days, the storage is evicted and they return as a new visitor.
+   A Safari visitor returning fortnightly is therefore invisible as a returnee.
+
+   Note this was NOT avoidable by staying with cookies: ITP caps
+   document.cookie-written cookies the same way. Only a server-set HttpOnly
+   cookie escapes it, and Streamlit Cloud gives no way to set one — the same
+   proxy that strips the Cookie header is in the path.
+
+Chrome and Firefox have no equivalent 7-day cap today, so this skews the
+undercount toward Safari and iOS traffic specifically.
+
 FAIL-OPEN
 =========
 Analytics must never be able to break the product. With no API key configured
@@ -68,6 +88,7 @@ outage cannot raise into the Streamlit thread.
 
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 
 import streamlit as st
@@ -78,6 +99,8 @@ _LAST_PAGE = "_rl_analytics_last_page"
 _CLIENT = "_rl_analytics_client"
 _DISTINCT = "_rl_analytics_distinct_id"
 _PENDING = "_rl_analytics_pending"
+_UNRESOLVED_RUNS = "_rl_analytics_unresolved_runs"
+_ID_EPHEMERAL = "_rl_analytics_id_ephemeral"
 
 
 def _secret(name: str, default: str = "") -> str:
@@ -161,18 +184,48 @@ def ensure_identity() -> str | None:
     except Exception:
         vid = None
 
-    if vid:
-        st.session_state[_DISTINCT] = str(vid)
-        # Flush HERE, not lazily on the next event. On the rerun where the id
-        # arrives, start_session() and page_view() both return early (their
-        # guards are already set from the first run), so no further event() call
-        # happens and a lazy flush would silently drop the session's first
-        # page_view — the one carrying the referrer.
-        client = _client()
-        if client is not None:
-            _flush(client, str(vid))
-        return str(vid)
-    return None
+    if not vid:
+        # The component has not answered. Normally it answers on the next rerun,
+        # so wait one round. But if it has still not answered after that — the
+        # iframe failed to load, or storage access is throwing in a way the
+        # component could not recover from — fall back to an EPHEMERAL id for
+        # this session rather than let the buffer sit there.
+        #
+        # The alternative is losing the events entirely, which would understate
+        # total traffic, not merely returning visitors. A visit we cannot
+        # recognise must still be counted, as a new one.
+        runs = st.session_state.get(_UNRESOLVED_RUNS, 0) + 1
+        st.session_state[_UNRESOLVED_RUNS] = runs
+        if runs >= 2:
+            st.session_state[_DISTINCT] = f"eph-{uuid.uuid4()}"
+            st.session_state[_ID_EPHEMERAL] = True
+            client = _client()
+            if client is not None:
+                _flush(client, st.session_state[_DISTINCT])
+            return st.session_state[_DISTINCT]
+        return None
+
+    # The component answers with {id, persistent}. persistent=False means the
+    # browser could not store the id, so this visit counts as new — recorded,
+    # and marked so the blind spot is measurable.
+    if isinstance(vid, dict):
+        resolved, persistent = str(vid.get("id") or ""), bool(vid.get("persistent"))
+    else:
+        resolved, persistent = str(vid), True
+    if not resolved:
+        return None
+
+    st.session_state[_DISTINCT] = resolved
+    st.session_state[_ID_EPHEMERAL] = not persistent
+    # Flush HERE, not lazily on the next event. On the rerun where the id
+    # arrives, start_session() and page_view() both return early (their guards
+    # are already set from the first run), so no further event() call happens
+    # and a lazy flush would silently drop the session's first page_view — the
+    # one carrying the referrer.
+    client = _client()
+    if client is not None:
+        _flush(client, resolved)
+    return resolved
 
 
 def distinct_id() -> str | None:
@@ -256,6 +309,13 @@ def _flush(client, vid: str) -> None:
 
 
 def _capture(client, vid: str, name: str, props: dict) -> None:
+    # id_type rides on every event so the size of the blind spot is measurable
+    # rather than assumed: "ephemeral" means this visitor's browser storage was
+    # unavailable, so they count as new and can never be seen returning. Compare
+    # its share against "persistent" to know how much the returning-visitor
+    # number is understated.
+    props = dict(props)
+    props["id_type"] = "ephemeral" if st.session_state.get(_ID_EPHEMERAL) else "persistent"
     try:
         client.capture(distinct_id=vid, event=name, properties=props)
     except Exception:

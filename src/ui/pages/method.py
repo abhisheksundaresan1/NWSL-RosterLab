@@ -140,9 +140,13 @@ def _sources_and_freshness() -> None:
 
     # Privacy. Short, and on the page rather than in a policy nobody opens.
     st.caption(
-        "**Privacy** — we count visits with a single first-party cookie so we can tell "
-        "how many people come back. We collect no personal data and no IP addresses. "
-        "Blocking the cookie does not affect anything on the site."
+        "**Privacy** — we store one randomly generated ID in your browser's local "
+        "storage so we can tell how many people come back. No cookie is used for this, "
+        "and we collect no personal data, no IP addresses, and nothing that identifies "
+        "your device. Clearing site data, or blocking storage, simply makes the next "
+        "visit count as a new one — nothing on the site stops working. Safari clears "
+        "this kind of storage after 7 days without a visit, so our own returning-visitor "
+        "count understates reality; we have no way to see past that, and don't try to."
     )
 
 
