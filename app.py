@@ -151,8 +151,9 @@ track.ensure_identity()
 track.start_session()
 track.page_view(getattr(nav, "url_path", "") or "this-week")
 
-# TEMPORARY diagnostic (?debug=identity): does st.context.cookies actually carry
-# our cookie through Streamlit Cloud's proxy? Remove once answered.
+# ?debug=identity — kept, not temporary. It is how the cookie failure was finally
+# caught, and it only ever renders on an explicit query parameter. Cookie values
+# are redacted apart from our own id; the same jar holds Streamlit's XSRF token.
 if st.query_params.get("debug") == "identity":
     st.json(track.debug_identity())
 
