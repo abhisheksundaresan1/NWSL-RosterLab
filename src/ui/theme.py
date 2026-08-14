@@ -91,7 +91,10 @@ _CSS = f"""
    so collapse it to zero height AND give the content real room — doing only one
    of the two leaves either an overlap or a dead gap.                          */
 header[data-testid="stHeader"] {{ height: 0; min-height: 0; background: transparent; }}
-.block-container {{ padding-top: 3.2rem; padding-bottom: 4rem; max-width: 1180px; }}
+/* 3.2rem left 67px of empty space above the wordmark while the tagline below it
+   sat flush against the nav. 1.6rem clears the (now zero-height) toolbar band
+   without the dead zone; the breathing room moved to where it was missing. */
+.block-container {{ padding-top: 1.6rem; padding-bottom: 4rem; max-width: 1180px; }}
 
 /* ---- Top navigation ------------------------------------------------------
    Rendered by app.py as st.page_link items inside a container keyed "rl_nav",
@@ -154,9 +157,12 @@ header[data-testid="stHeader"] {{ height: 0; min-height: 0; background: transpar
     font-family: {FONT_DISPLAY}; font-weight: 600; font-size: 22px;
     color: {FG}; line-height: 1.15; margin: 10px 0 0 0;
 }}
+/* The bottom margin is the fix for the tagline sitting flush against the nav —
+   measured gap was 0px, so the brand block and the navigation read as one
+   undifferentiated slab. */
 .rl-tagline-sub {{
     font-family: {FONT_TEXT}; font-size: 13px; color: {FG_MUTED};
-    margin: 3px 0 0 0; line-height: 1.45;
+    margin: 3px 0 22px 0; line-height: 1.45;
 }}
 @media (max-width: 700px) {{
     .rl-brand {{ font-size: 32px; }}
@@ -177,6 +183,49 @@ header[data-testid="stHeader"] {{ height: 0; min-height: 0; background: transpar
     margin: 0 0 10px 0;
 }}
 @media (max-width: 700px) {{ .rl-eyebrow-hero {{ font-size: 14px; letter-spacing: .1em; }} }}
+/* ---- Hero: three stories, weighted by importance ------------------------
+   One sentence could not carry three facts without becoming a list. Three
+   lines at descending size let the eye take the matchday story first and the
+   supporting ones only if it wants them.                                    */
+.rl-hero-1 {{
+    font-family: {FONT_TEXT}; font-size: 21px; font-weight: 500; color: {FG};
+    line-height: 1.4; margin: 0 0 8px 0; max-width: 62em;
+}}
+.rl-hero-2 {{
+    font-family: {FONT_TEXT}; font-size: 17px; color: {FG_MUTED};
+    line-height: 1.45; margin: 0 0 5px 0; max-width: 62em;
+}}
+.rl-hero-3 {{
+    font-family: {FONT_TEXT}; font-size: 17px; color: {FG_MUTED};
+    line-height: 1.45; margin: 0 0 12px 0; max-width: 62em;
+}}
+.rl-hero-1 b, .rl-hero-2 b, .rl-hero-3 b {{ color: {FG}; font-weight: 600; }}
+/* The returning-visitor line — set apart from the hero, in mono, because it is
+   a status note about what moved rather than part of the story. */
+.rl-changed {{
+    font-family: {FONT_MONO}; font-size: 13px; color: {FG_FAINT};
+    border-left: 2px solid {LINE}; padding-left: 10px;
+    margin: 14px 0 0 0; line-height: 1.5;
+}}
+.rl-changed b {{ color: {FG_MUTED}; font-weight: 500; }}
+@media (max-width: 700px) {{
+    .rl-hero-1 {{ font-size: 18px; }}
+    .rl-hero-2, .rl-hero-3 {{ font-size: 15px; }}
+}}
+
+/* ---- Time-scale badge above a card's controls ---------------------------- */
+.rl-scale {{
+    border-left: 4px solid {ACCENT}; padding: 2px 0 2px 10px; margin: 0 0 12px 0;
+}}
+.rl-scale-k {{
+    display: block; font-family: {FONT_MONO}; font-size: 13px; font-weight: 500;
+    letter-spacing: .14em; text-transform: uppercase; color: {FG};
+}}
+.rl-scale-s {{
+    display: block; font-family: {FONT_TEXT}; font-size: 12px; color: {FG_FAINT};
+    margin-top: 2px;
+}}
+
 .rl-h2 {{
     font-family: {FONT_DISPLAY}; font-weight: 700; font-size: 30px;
     color: {FG}; margin: 0 0 2px 0; line-height: 1.15;

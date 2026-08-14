@@ -365,6 +365,39 @@ def card_download(card_type: str, **props) -> None:
     event("card_download", card_type=card_type, **props)
 
 
+@st.cache_resource(show_spinner=False)
+def _share_component():
+    return components.declare_component(
+        "rl_share", path=str(Path(__file__).parent / "rl_share")
+    )
+
+
+def share_row(card_type: str, url: str, text: str, key: str) -> None:
+    """Render a share row and record what was clicked.
+
+    The component returns {action, nonce}. The nonce matters: a component's
+    value persists across reruns, so without it a single share would re-fire
+    card_share on every subsequent interaction with the page and the channel
+    numbers would be fiction.
+    """
+    if not _analytics_on():
+        # No analytics configured — still render the row, just don't report.
+        pass
+    try:
+        result = _share_component()(url=url, text=text, key=key, default=None)
+    except Exception:
+        return
+    if not isinstance(result, dict) or not result.get("action"):
+        return
+
+    seen_key = f"_rl_share_nonce_{key}"
+    nonce = result.get("nonce")
+    if st.session_state.get(seen_key) == nonce:
+        return
+    st.session_state[seen_key] = nonce
+    event("card_share", card_type=card_type, platform=result["action"])
+
+
 def ask_query(mode: str, query: str | None = None, results: int | None = None) -> None:
     """A Scout query ran. `mode` is "canned" or "typed", counted separately."""
     event("ask_query", mode=mode, query=query, results=results)

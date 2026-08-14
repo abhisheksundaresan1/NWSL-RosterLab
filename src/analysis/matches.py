@@ -316,6 +316,71 @@ def select_team_of_the_week(
     return rows
 
 
+def totw_history(
+    match_table: pd.DataFrame,
+    gk_table: pd.DataFrame | None,
+    up_to_matchday: int,
+    min_minutes: int = TOTW_MIN_MINUTES,
+) -> dict[int, dict[str, str]]:
+    """Team of the Week for every matchday up to and including `up_to_matchday`.
+
+    Returns {matchday: {slot: player_name}}. Cheap: the whole season's matches
+    are already in memory, and selection is a sort per position.
+
+    This is what lets the page say something to a RETURNING visitor. Without it
+    every week's card looks the same as the last one, and a reader has no way to
+    see what actually changed — which is the only reason to come back weekly.
+    """
+    out: dict[int, dict[str, str]] = {}
+    if match_table is None or match_table.empty:
+        return out
+    for md in sorted(m for m in match_table["matchday"].dropna().unique()
+                     if m <= up_to_matchday):
+        rows = select_team_of_the_week(match_table, int(md), gk_table=gk_table,
+                                       min_minutes=min_minutes)
+        picked = {r["slot"]: r["player_name"] for r in rows
+                  if r["player_name"] != "—"}
+        if picked:
+            out[int(md)] = picked
+    return out
+
+
+def totw_changes(history: dict[int, dict[str, str]], matchday: int) -> dict:
+    """What changed in this XI versus the one before it.
+
+    `changed` counts slots whose occupant is a different player from last
+    matchday, counted only over slots BOTH XIs filled — a slot that was blank
+    last week has not "changed hands", it has simply become fillable, and
+    counting it as a change would overstate the turnover.
+
+    `first_time` is players appearing in a Team of the Week for the first time
+    this season, which is the more interesting story of the two.
+    """
+    current = history.get(matchday, {})
+    if not current:
+        return {"changed": 0, "compared": 0, "held": [], "first_time": [],
+                "previous_matchday": None}
+
+    earlier = [md for md in history if md < matchday]
+    prev_md = max(earlier) if earlier else None
+    previous = history.get(prev_md, {}) if prev_md else {}
+
+    shared = [s for s in current if s in previous]
+    changed = [s for s in shared if current[s] != previous[s]]
+    held = [current[s] for s in shared if current[s] == previous[s]]
+
+    seen_before = {name for md in earlier for name in history[md].values()}
+    first_time = [n for n in current.values() if n not in seen_before]
+
+    return {
+        "changed": len(changed),
+        "compared": len(shared),
+        "held": held,
+        "first_time": first_time,
+        "previous_matchday": prev_md,
+    }
+
+
 def _empty_match_table() -> pd.DataFrame:
     return pd.DataFrame(columns=[
         "player_id", "player_name", "position", "team_id", "team_abbreviation",

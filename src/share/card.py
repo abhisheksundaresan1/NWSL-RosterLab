@@ -735,6 +735,7 @@ def render_leaderboard_card(
     season: str,
     subtitle: str | None = None,
     coverage: str | None = None,
+    header_color: str | None = None,
 ) -> bytes:
     """
     Render a 1080×1350 PNG leaderboard card and return PNG bytes.
@@ -749,7 +750,11 @@ def render_leaderboard_card(
     $0 cost — no LLM calls.
     """
     # Neutral header color (multiple teams — no single team color)
-    HEADER_COLOR = "#1A3A5C"
+    # Header colour is overridable so cards covering different TIME SCALES are
+    # distinguishable at a glance. Two pitch graphics with identical chrome
+    # forced the reader to parse the header text to tell "this weekend" from
+    # "this month"; a different band colour registers before any reading.
+    HEADER_COLOR = header_color or "#1A3A5C"
     HEADER_H     = 200
     # A coverage line needs a band of its own; at the original 60px the subtitle
     # rendered underneath it and was clipped by the top of the pitch. Cards

@@ -68,6 +68,23 @@ def metric_grid(metrics: dict[str, str], per_row: int = 4) -> None:
                 )
 
 
+def scale_badge(label: str, sub: str, colour: str) -> None:
+    """A time-scale marker above a card's controls.
+
+    Team of the Week and In form share a pitch layout, so without a marker the
+    reader has to read header text to tell one weekend from one month. The badge
+    carries the same colour as that card's header band, so the on-page label and
+    the downloaded PNG agree.
+    """
+    st.markdown(
+        f'<div class="rl-scale" style="border-left-color:{colour}">'
+        f'<span class="rl-scale-k">{_esc(label)}</span>'
+        f'<span class="rl-scale-s">{_esc(sub)}</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def stat_card(label: str, value: str, caption: str = "",
               accent: str | None = None) -> None:
     """A headline figure with a label above and context below.

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<!--
+  Share row for a card.
+
+  Two things have to be true at once, which is why this is a component rather
+  than either plain markdown links or Streamlit buttons:
+
+    * The links must be real anchors. Opening a share composer from JS after a
+      Streamlit rerun gets caught by popup blockers, because the window.open no
+      longer happens inside the user's click.
+    * The click must reach Python, so card_share goes through the same
+      server-side pipeline (and the same visitor id) as every other event
+      instead of a second, differently-identified client-side path.
+
+  A component satisfies both: the anchor opens natively, and setComponentValue
+  reports what was clicked. Every click carries a nonce so Python can tell a new
+  click from the value simply persisting across reruns.
+
+  navigator.share is feature-detected and hidden where unsupported — it is
+  mainly mobile Safari and Chrome Android. Desktop falls back to the link row,
+  which is always rendered.
+-->
+<html>
+  <head><meta charset="utf-8" />
+  <style>
+    body { margin:0; padding:0; font-family: -apple-system, "Segoe UI", sans-serif; }
+    .row { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+    a.btn, button.btn {
+      font-size:12px; line-height:1; text-decoration:none; cursor:pointer;
+      color:#96AABE; background:#0F1B27; border:1px solid #223242;
+      border-radius:6px; padding:7px 10px; font-family:inherit;
+    }
+    a.btn:hover, button.btn:hover { color:#FFFFFF; border-color:#37506A; }
+    button.primary { color:#081018; background:#FFC24B; border-color:#FFC24B; font-weight:600; }
+    .ok { color:#6FA88C !important; border-color:#6FA88C !important; }
+  </style>
+  </head>
+  <body>
+    <div class="row" id="row"></div>
+    <script>
+      function send(type, data) {
+        window.parent.postMessage(
+          Object.assign({ isStreamlitMessage: true, type: type }, data), "*");
+      }
+      function report(action) {
+        send("streamlit:setComponentValue",
+             { value: { action: action, nonce: Date.now() }, dataType: "json" });
+      }
+
+      var built = false;
+      function build(args) {
+        if (built) return;
+        built = true;
+        var url = args.url || "";
+        var text = args.text || "";
+        var row = document.getElementById("row");
+
+        function mkBtn(label, cls, onclick) {
+          var b = document.createElement("button");
+          b.className = "btn" + (cls ? " " + cls : "");
+          b.textContent = label;
+          b.onclick = onclick;
+          row.appendChild(b);
+          return b;
+        }
+        function mkLink(label, href, action) {
+          var a = document.createElement("a");
+          a.className = "btn"; a.textContent = label; a.href = href;
+          a.target = "_blank"; a.rel = "noopener";
+          a.onclick = function () { report(action); };
+          row.appendChild(a);
+        }
+
+        // Native share first, where the platform actually has it.
+        if (navigator.share) {
+          mkBtn("Share", "primary", function () {
+            navigator.share({ title: "NWSL RosterLab", text: text, url: url })
+              .then(function () { report("native"); })
+              .catch(function () { /* user dismissed — not an event */ });
+          });
+        }
+
+        // Copy with a fallback, and report either way.
+        //
+        // navigator.clipboard rejects without a real user gesture, in insecure
+        // contexts, and in some embedded webviews. Reporting only inside .then()
+        // meant a failed copy produced no clipboard content, no feedback, and no
+        // analytics event — the click vanished entirely.
+        function copy(value, action, btn) {
+          function done(ok) {
+            btn.textContent = ok ? "Copied" : "Press Ctrl+C";
+            btn.classList.add("ok");
+            report(action);
+          }
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(value)
+              .then(function () { done(true); })
+              .catch(function () { done(legacyCopy(value)); });
+          } else {
+            done(legacyCopy(value));
+          }
+        }
+        function legacyCopy(value) {
+          try {
+            var ta = document.createElement("textarea");
+            ta.value = value;
+            ta.style.position = "fixed"; ta.style.opacity = "0";
+            document.body.appendChild(ta);
+            ta.select();
+            var ok = document.execCommand("copy");
+            document.body.removeChild(ta);
+            return ok;
+          } catch (e) { return false; }
+        }
+
+        mkBtn("Copy link", "", function () { copy(url, "copy_link", this); });
+        mkBtn("Copy text", "", function () { copy(text + " " + url, "copy_text", this); });
+
+        var u = encodeURIComponent(url), t = encodeURIComponent(text);
+        mkLink("X",        "https://twitter.com/intent/tweet?text=" + t + "&url=" + u, "x");
+        mkLink("Reddit",   "https://www.reddit.com/submit?url=" + u + "&title=" + t, "reddit");
+        mkLink("WhatsApp", "https://wa.me/?text=" + encodeURIComponent(text + " " + url), "whatsapp");
+        mkLink("Facebook", "https://www.facebook.com/sharer/sharer.php?u=" + u, "facebook");
+        mkLink("LinkedIn", "https://www.linkedin.com/sharing/share-offsite/?url=" + u, "linkedin");
+        mkLink("Email",    "mailto:?subject=" + t + "&body=" + encodeURIComponent(text + "\n\n" + url), "email");
+
+        send("streamlit:setFrameHeight", { height: row.offsetHeight + 8 });
+      }
+
+      window.addEventListener("message", function (e) {
+        if (e.data && e.data.type === "streamlit:render") {
+          build(e.data.args || {});
+          send("streamlit:setFrameHeight",
+               { height: document.getElementById("row").offsetHeight + 8 });
+        }
+      });
+      send("streamlit:componentReady", { apiVersion: 1 });
+    </script>
+  </body>
+</html>
