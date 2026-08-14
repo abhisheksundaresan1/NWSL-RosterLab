@@ -1,112 +1,56 @@
-"""This week — the landing page.
+"""This week — the landing page, rebuilt around an actual week.
 
-Opens with what changed this week: a plain-English headline, three headline
-figures (biggest riser, biggest faller, top newcomer), then the live drops.
-The Undervalued XI sits below as an evergreen section — it is a retrospective
-built from a completed season and does not change week to week, so it should
-not be the lede on a page called "This week".
+WHAT CHANGED AND WHY
 
-Two things this page is careful about:
+The page used to be five near-identical pitch graphics over one 30-day window,
+with the same players named in the headline, in three stat cards, and again in
+the XIs below. Nothing on it was weekly, on a page called "This week".
 
-1. The Undervalued XI is not gated behind the season picker. The original tab
-   branched — Undervalued XI *or* the in-season drops, never both — so with 2026
-   as the default the page would have opened with "requires a completed season".
-   It always renders from the most recent completed season, and says so.
+Now:
+  * the hero makes ONE claim about ONE player, drawn from the matchday just
+    played, instead of three clauses of equal weight;
+  * Team of the Week is the lead block — the thing that makes the page weekly;
+  * one movement card follows (In form, the 30-day view) rather than two that
+    share players and split the reader's attention;
+  * the disclosure that used to sit between the hero and the first content is in
+    an expander. Credibility should be available, not mandatory reading;
+  * Newcomers, Undervalued XI and Risers & Fallers moved to Drops. They are
+    seasonal and monthly artifacts, and they were burying the weekly one.
 
-2. Every headline figure is computed independently and has its own empty state.
-   compute_movement() returns an empty frame when only one snapshot exists or
-   when the minutes floor excludes everyone, and .head(1).iloc[0] on an empty
-   frame raises IndexError. The newcomer list can also be legitimately empty
-   now that a value floor applies. One missing figure must not take down the
-   landing page.
+WHY "IN FORM" AND NOT "RISERS" IS THE CARD THAT STAYED
+Risers needs a qualifying sample in two consecutive windows. Across the August
+international break only 56 of 203 players had one at all, and at MIN_FORM_DELTA
+roughly eight clear it league-wide — a landing-page block that can go nearly
+empty. In form is always computable, and beside Team of the Week it reads as a
+clean zoom-out: this week, then this month.
 """
 
 from __future__ import annotations
 
+from datetime import date as _date
+
 import pandas as pd
 import streamlit as st
 
-from src.analysis.drops import (
-    select_undervalued_xi, best_xi_excluded_names, undervalued_min_minutes,
-)
-from src.analysis.movement import (
-    list_snapshots, load_snapshot, select_risers_xi, select_fallers_xi,
-)
 from src.analysis.form import (
     FORM_WINDOW_DAYS, K_FORM, MIN_MINUTES_FORM, SMALL_COHORT, MIN_COHORT_FOR_RANK,
     form_as_card_rows, dominant_action,
 )
-from src.analysis.newcomers import select_newcomer_watch_xi
-from src.analysis.season import IN_SEASON_YEAR
-from src.share.card import render_leaderboard_card
-from src.analytics import track
-from src.ui import components as c
-from src.ui import loaders, state, theme
-
-from datetime import date as _date
-
-MOVE_MIN_MINUTES = 270   # newcomer-table floor (~3 games)
-
-# One sentence, reused wherever a form number appears, so the parameters travel
-# with the metric instead of living only in the Method page or in code.
-FORM_DISCLOSURE = (
-    f"**Form** covers the last **{FORM_WINDOW_DAYS} days only**, for players with at "
-    f"least **{MIN_MINUTES_FORM} minutes** in that window (about two full matches), "
-    f"shrunk toward the position average with **K = {K_FORM} minutes**. It is a "
-    f"separate metric from the season value score — the two are never combined."
+from src.analysis.matches import (
+    TOTW_MIN_MINUTES, coverage_line, latest_complete_matchday, match_coverage,
+    select_team_of_the_week,
 )
+from src.analysis.movement import select_risers_xi
+from src.analysis.season import IN_SEASON_YEAR
+from src.analytics import track
+from src.share.card import render_leaderboard_card
+from src.ui import components as c
+from src.ui import loaders, theme
 
-
-def _human_date(iso: str | None) -> str:
-    """'2026-08-10' -> 'AUGUST 10'. Avoids %-d/%#d, which differ across platforms."""
-    if not iso:
-        return ""
-    d = _date.fromisoformat(iso)
-    return f"{d:%B} {d.day}".upper()
-
-
-def render() -> None:
-    snaps = list_snapshots(IN_SEASON_YEAR)
-    latest = snaps[-1] if snaps else None
-
-    form_date = loaders.latest_form_date()
-    form = loaders.load_form(form_date) if form_date else pd.DataFrame()
-
-    # The dated eyebrow leads the page — a returning visitor's first question is
-    # which week they are looking at.
-    st.markdown(
-        f'<p class="rl-eyebrow-hero">NWSL {IN_SEASON_YEAR} · WEEK OF '
-        f'{_human_date(form_date or latest)}</p>' if (form_date or latest) else
-        '<p class="rl-eyebrow-hero">NWSL ROSTERLAB</p>',
-        unsafe_allow_html=True,
-    )
-
-    newcomers = _newcomer_table(latest)
-
-    _headline(form, newcomers)
-    _headline_figures(form, newcomers, snaps)
-
-    if not form.empty:
-        theme.rule()
-        _form_cards(form, form_date)
-    if snaps:
-        theme.rule()
-        _newcomers(snaps[-1])
-
-    theme.rule()
-    _undervalued_xi()
-
-
-def _newcomer_table(latest: str | None) -> pd.DataFrame:
-    if not latest:
-        return pd.DataFrame()
-    table = loaders.load_in_season_table(MOVE_MIN_MINUTES, latest)
-    hist = loaders.cached_historical_ids()
-    out = table[~table["player_id"].astype(str).isin(hist)]
-    return out.sort_values("value_score", ascending=False)
-
-
-# --- Headline ---------------------------------------------------------------
+# Rendered card width on the page. The downloaded PNG stays 1080x1350 — st.image
+# scales the display only — so the page stops being a long scroll of full-width
+# graphics without touching what a visitor actually shares.
+CARD_PX = 430
 
 _ACTION_PHRASE = {
     "shooting": "her shooting", "dribbling": "her dribbling", "passing": "her passing",
@@ -115,353 +59,243 @@ _ACTION_PHRASE = {
 }
 
 
-def _headline(form: pd.DataFrame, newcomers: pd.DataFrame) -> None:
-    """One plain-English sentence about the football.
+def _human_date(iso: str | None) -> str:
+    """'2026-08-10' -> 'AUGUST 10'. Avoids %-d, which is not portable to Windows."""
+    if not iso:
+        return ""
+    d = _date.fromisoformat(iso)
+    return f"{d:%B} {d.day}".upper()
 
-    HARD RULE: every clause is computed from columns we hold. This page has no
-    access to fixtures, opponents, scorelines or goals, and no LLM is involved,
-    so the sentence cannot reference them. The only texture it adds beyond names
-    and numbers is WHICH ACTION TYPE drove a player's form — which is derived
-    arithmetic on ga_*_p90, not narration.
 
-    Units are stated ("0.31 g+/90") because form is a rate, not the z-scored
-    value points used elsewhere. Degrades clause by clause.
-    """
-    parts: list[str] = []
+def render() -> None:
+    fixtures = loaders.load_fixtures()
+    matches = loaders.load_matches()
+    keepers = loaders.load_matches(goalkeepers=True)
 
+    matchday = latest_complete_matchday(fixtures) if not fixtures.empty else None
+    cov = match_coverage(fixtures, matchday) if matchday else None
+
+    form_date = loaders.latest_form_date()
+    form = loaders.load_form(form_date) if form_date else pd.DataFrame()
+
+    totw = (select_team_of_the_week(matches, matchday, gk_table=keepers)
+            if matchday and not matches.empty else [])
+
+    # --- Hero ---------------------------------------------------------------
+    eyebrow = (f"NWSL {IN_SEASON_YEAR} · {coverage_line(cov)}" if cov
+               else f"NWSL {IN_SEASON_YEAR}")
+    st.markdown(f'<p class="rl-eyebrow-hero">{c._esc(eyebrow)}</p>',
+                unsafe_allow_html=True)
+    _hero(totw, form, cov)
+
+    # --- Team of the Week ---------------------------------------------------
+    if totw:
+        theme.rule()
+        _team_of_the_week(totw, cov, matchday)
+
+    # --- In form ------------------------------------------------------------
     if not form.empty:
-        top = form.nlargest(1, "form_weighted_p90").iloc[0]
-        action = dominant_action(top)
-        tail = f" — driven mostly by {_ACTION_PHRASE[action]}" if action else ""
-        parts.append(
-            f"<b>{top['player_name']}</b> has been the league's best performer over the "
-            f"last {FORM_WINDOW_DAYS} days at {top['form_weighted_p90']:.2f} g+/90"
-            f"{tail}, across {int(top['form_matches'])} matches."
-        )
+        theme.rule()
+        _in_form(form, form_date)
 
-        movers = form.dropna(subset=["form_delta"])
-        risers = movers[movers["form_delta"] > 0] if not movers.empty else movers
-        if not risers.empty:
-            r = risers.nlargest(1, "form_delta").iloc[0]
-            if r["player_id"] == top["player_id"]:
-                # Same player tops both. Say so once rather than opening a second
-                # sentence with a name the reader just read.
-                parts.append(
-                    f"She has also improved most on the previous {FORM_WINDOW_DAYS} "
-                    f"days, up {abs(r['form_delta']):.2f} g+/90."
-                )
-            else:
-                parts.append(
-                    f"<b>{r['player_name']}</b> has improved most on the previous "
-                    f"{FORM_WINDOW_DAYS} days, up {abs(r['form_delta']):.2f} g+/90."
-                )
-
-    if not newcomers.empty:
-        first = newcomers.iloc[0]
-        parts.append(
-            f"<b>{first['player_name']}</b> leads all first-year players on season "
-            f"value at {first['value_score']:+.2f}."
-        )
-
-    if not parts:
-        parts.append("The season is under way — check back once a few more games are in.")
-
-    st.markdown(f'<p class="rl-lede">{" ".join(parts)}</p>', unsafe_allow_html=True)
+    # --- Disclosure, collapsed ---------------------------------------------
+    theme.rule()
+    _how_calculated(form, cov)
 
 
-def _headline_figures(form: pd.DataFrame, newcomers: pd.DataFrame,
-                      snaps: list[str]) -> None:
-    """Three figures, each computed and failing independently."""
-    col_b, col_r, col_n = st.columns(3)
+# --- Hero -------------------------------------------------------------------
 
-    with col_b:
-        if form.empty:
-            c.stat_card_empty("Best form", _why_no_form(snaps))
-        else:
-            b = form.nlargest(1, "form_weighted_p90").iloc[0]
-            c.stat_card("Best form", str(b["player_name"]),
-                        f"{b['form_weighted_p90']:.2f} g+/90  ·  {b['form_sample_label']}",
-                        accent=theme.POSITIVE)
+def _hero(totw: list[dict], form: pd.DataFrame, cov: dict | None) -> None:
+    """One dominant claim about one player.
 
-    with col_r:
-        movers = form.dropna(subset=["form_delta"]) if not form.empty else form
-        risers = movers[movers["form_delta"] > 0] if not movers.empty else movers
-        if risers.empty:
-            c.stat_card_empty(
-                "Most improved",
-                _why_no_form(snaps) if form.empty else
-                f"Nobody has {MIN_MINUTES_FORM}+ minutes in both this window and the "
-                f"previous one — the calendar between them was mostly a break."
-            )
-        else:
-            r = risers.nlargest(1, "form_delta").iloc[0]
-            c.stat_card("Most improved", str(r["player_name"]),
-                        f"{r['form_delta']:+.2f} g+/90  ·  {r['team_name']}",
-                        accent=theme.POSITIVE)
-
-    with col_n:
-        if newcomers.empty:
-            c.stat_card_empty("Top newcomer", "No first-year player has enough minutes yet.")
-        else:
-            n = newcomers.iloc[0]
-            c.stat_card("Top newcomer", str(n["player_name"]),
-                        f"{n['value_score']:+.2f} season value  ·  {n['team_name']}")
-
-    _form_caption(form)
-
-
-def _form_caption(form: pd.DataFrame) -> None:
-    """The parameters, the sample, and the cohort caveat — with the numbers."""
-    st.caption(FORM_DISCLOSURE)
-    if form.empty:
-        return
-
-    n_cur = int(form["form_fixtures"].iloc[0])
-    n_prev = int(form["prev_fixtures"].iloc[0])
-    st.caption(
-        f"This window covers **{n_cur} fixtures**; the previous {FORM_WINDOW_DAYS} days "
-        f"covered **{n_prev}**. Change is shown only for players clearing the minutes "
-        f"floor in *both*, so an international break leaves most players without one."
-    )
-
-    thin = (
-        form[["position", "form_cohort_n"]].drop_duplicates()
-        .query(f"form_cohort_n <= {SMALL_COHORT}").sort_values("form_cohort_n")
-    )
-    if not thin.empty:
-        bits = ", ".join(f"{r.position} ({int(r.form_cohort_n)})" for r in thin.itertuples())
-        suppressed = thin[thin["form_cohort_n"] < MIN_COHORT_FOR_RANK]
-        note = (
-            f"Thin cohorts this window — {bits}. A form score is standardised against "
-            f"the players at that position who clear the floor, so with a small group "
-            f"treat the ranking as indicative."
-        )
-        if not suppressed.empty:
-            note += (
-                f" Positions with fewer than {MIN_COHORT_FOR_RANK} qualifiers show a rate "
-                f"and sample size only — no rank or score is published for them."
-            )
-        st.caption(note)
-
-
-def _why_no_form(snaps: list[str]) -> str:
-    if not snaps:
-        return "No in-season data yet."
-    return (f"No player has {MIN_MINUTES_FORM}+ minutes in the last "
-            f"{FORM_WINDOW_DAYS} days yet.")
-
-
-# --- Undervalued XI ---------------------------------------------------------
-
-def _undervalued_xi() -> None:
-    """Always drawn from the most recent completed season, whatever season is
-    selected — this is a retrospective artifact and can't be computed mid-season
-    (it needs a final Best XI to exclude)."""
-    season = state.most_recent_completed_season()
-    min_minutes = 500
-    uv_min = undervalued_min_minutes(season)
-
-    theme.section(
-        "Undervalued XI",
-        subtitle=(f"Highest-value outfield players left out of the {season} NWSL Best XI "
-                  f"(First or Second). Minimum {uv_min:,} minutes, so injury-shortened "
-                  "seasons don't read as snubs. A slot is filled only if the best "
-                  "available player ranks in the **top 3 — or top 30% — of her "
-                  "position**; otherwise it is left blank. Outfield only."),
-        eyebrow_text=f"FROM THE COMPLETED {season} SEASON",
-    )
-
-    png_key = f"drops_png_{season}_{min_minutes}_v5"
-    rows_key = f"drops_rows_{season}_{min_minutes}_v5"
-    if png_key not in st.session_state:
-        try:
-            with st.spinner("Generating Undervalued XI…"):
-                table = loaders.load_value_table(min_minutes, season)
-                rows = select_undervalued_xi(table, season, min_minutes)
-                st.session_state[png_key] = render_leaderboard_card(
-                    rows, title="Undervalued XI", season=season,
-                    subtitle="Top-value outfield players outside the Best XI  ·  Outfield only",
-                )
-                st.session_state[rows_key] = rows
-        except ValueError as e:
-            st.warning(str(e))
-            return
-        except Exception as e:
-            st.error(f"Could not render Undervalued XI: {e}")
-            return
-
-    png, rows = st.session_state[png_key], st.session_state.get(rows_key, [])
-    img_col, meta_col = st.columns([3, 2])
-    with img_col:
-        st.image(png, width="stretch")
-    with meta_col:
-        if st.download_button(
-            "⬇ Download PNG", data=png, file_name=f"undervalued_xi_{season}.png",
-            mime="image/png", key="dl_undervalued_xi",
-        ):
-            track.card_download("undervalued_xi", season=season)
-        _stats_table(rows)
-        with st.expander(f"Who was excluded ({season} Best XI)", expanded=False):
-            first, second = best_xi_excluded_names(season)
-            st.caption("**First XI** — " + ", ".join(first))
-            st.caption("**Second XI** — " + ", ".join(second))
-
-
-# --- Risers & Fallers -------------------------------------------------------
-
-def _form_cards(form: pd.DataFrame, form_date: str | None) -> None:
-    """In-form XI, plus risers/fallers when a comparable previous window exists.
-
-    The level ("who is playing best right now") leads, because it is always
-    computable. The change is secondary and genuinely unavailable across an
-    international break — rather than fabricate one, the section says so.
+    HARD RULE, unchanged: every clause is computed from columns we hold. The page
+    has no access to commentary, so it cannot narrate a match — but it does now
+    know the opponent and the scoreline, which is fact from the fixtures table
+    rather than invention, and which action type drove the performance, which is
+    arithmetic on the g+ breakdown.
     """
+    filled = [r for r in totw if r["player_name"] != "—" and not r.get("scale_tag")]
+    if filled:
+        top = max(filled, key=lambda r: r["value_score"])
+        st.markdown(
+            f'<p class="rl-lede"><b>{c._esc(top["player_name"])}</b> was the standout of '
+            f'the matchday, adding <b>{top["value_score"]:+.2f} goals</b> for '
+            f'{c._esc(top["team_abbreviation"])} {c._esc(top["context"])} — the best '
+            f'single performance of the round.</p>',
+            unsafe_allow_html=True,
+        )
+        _named = {top["player_name"]}
+    elif not form.empty:
+        best = form.nlargest(1, "form_weighted_p90").iloc[0]
+        action = dominant_action(best)
+        tail = f" — driven mostly by {_ACTION_PHRASE[action]}" if action else ""
+        st.markdown(
+            f'<p class="rl-lede"><b>{c._esc(best["player_name"])}</b> has been the '
+            f'league\'s best performer over the last {FORM_WINDOW_DAYS} days at '
+            f'{best["form_weighted_p90"]:.2f} g+/90{tail}.</p>',
+            unsafe_allow_html=True,
+        )
+        _named = {best["player_name"]}
+    else:
+        st.markdown('<p class="rl-lede">The season is under way — check back once a '
+                    'few more games are in.</p>', unsafe_allow_html=True)
+        _named = set()
+
+    st.session_state["_tw_hero_named"] = _named
+
+
+# --- Team of the Week -------------------------------------------------------
+
+def _team_of_the_week(rows: list[dict], cov: dict | None, matchday: int) -> None:
+    line = coverage_line(cov) if cov else f"MATCHDAY {matchday}"
+    theme.section(
+        "Team of the Week",
+        subtitle=(f"The best performance at each position from matchday {matchday}, by "
+                  f"raw goals added in those matches. Minimum {TOTW_MIN_MINUTES} minutes "
+                  f"played. The keeper is ranked among keepers — goalkeeper g+ is built "
+                  f"from shot-stopping, claiming and sweeping, so it is **not** comparable "
+                  f"with an outfielder's number and is tagged GK on the card."),
+    )
+
+    key = f"totw_{matchday}_v1"
+    if key not in st.session_state:
+        with st.spinner("Building Team of the Week…"):
+            st.session_state[key] = render_leaderboard_card(
+                rows, title="Team of the Week", season=IN_SEASON_YEAR,
+                subtitle="Best performance per position · raw goals added",
+                coverage=line,
+            )
+    png = st.session_state[key]
+
+    img_col, meta_col = st.columns([2, 3])
+    with img_col:
+        st.image(png, width=CARD_PX)
+    with meta_col:
+        if st.download_button("⬇ Download PNG", data=png,
+                              file_name=f"team_of_the_week_{IN_SEASON_YEAR}_md{matchday}.png",
+                              mime="image/png", key="dl_totw"):
+            track.card_download("team_of_the_week", season=IN_SEASON_YEAR,
+                                matchday=int(matchday))
+        st.caption(f"**{line}**")
+        _totw_table(rows)
+
+
+def _totw_table(rows: list[dict]) -> None:
+    filled = [r for r in rows if r["player_name"] != "—"]
+    if not filled:
+        return
+    with st.expander("Full XI — match detail", expanded=False):
+        df = pd.DataFrame([{
+            "Pos": r["position"],
+            "Player": r["player_name"] + (" (GK)" if r.get("scale_tag") else ""),
+            "Team": r["team_abbreviation"],
+            "Match": r.get("context", ""),
+            "g+": f"{r['value_score']:+.2f}",
+            "Minutes": r["minutes_played"],
+        } for r in filled])
+        st.dataframe(c.dash_blanks(df), hide_index=True, width="stretch")
+
+
+# --- In form ----------------------------------------------------------------
+
+def _in_form(form: pd.DataFrame, form_date: str | None) -> None:
     theme.section(
         f"In form · last {FORM_WINDOW_DAYS} days",
-        subtitle=(f"Position-weighted goals added per 90 over the last {FORM_WINDOW_DAYS} "
-                  f"days only — not the season score. Minimum {MIN_MINUTES_FORM} minutes "
-                  f"in the window; shrunk toward the position average (K = {K_FORM})."),
-        eyebrow_text=f"NWSL {IN_SEASON_YEAR} · IN PROGRESS",
+        subtitle=(f"Zooming out from the single matchday: position-weighted goals added "
+                  f"per 90 across the last {FORM_WINDOW_DAYS} days. A different metric "
+                  f"from the season value score, and never combined with it."),
     )
 
-    key = f"form_cards_{form_date}_v1"
+    key = f"form_card_{form_date}_v2"
     if key not in st.session_state:
         with st.spinner("Building form XI…"):
-            best_rows = select_risers_xi(form_as_card_rows(form, "form_weighted_p90"))
+            rows = select_risers_xi(form_as_card_rows(form, "form_weighted_p90"))
             st.session_state[key] = (
                 render_leaderboard_card(
-                    best_rows, title="In form", season=IN_SEASON_YEAR,
+                    rows, title="In form", season=IN_SEASON_YEAR,
                     subtitle=f"Weighted g+/90 · last {FORM_WINDOW_DAYS} days · outfield only",
                 ),
-                best_rows,
+                rows,
             )
-
     png, rows = st.session_state[key]
-    img_col, meta_col = st.columns([3, 2])
+
+    img_col, meta_col = st.columns([2, 3])
     with img_col:
-        st.image(png, width="stretch")
+        st.image(png, width=CARD_PX)
     with meta_col:
         if st.download_button("⬇ Download PNG", data=png,
                               file_name=f"in_form_{IN_SEASON_YEAR}_{form_date}.png",
                               mime="image/png", key="dl_in_form"):
             track.card_download("in_form", season=IN_SEASON_YEAR, window=form_date)
-        _stats_table(rows, value_label="g+/90")
-
-    movers = form.dropna(subset=["form_delta"])
-    if movers.empty:
         st.caption(
-            f"**No risers and fallers this window.** Form change needs "
-            f"{MIN_MINUTES_FORM}+ minutes in both this window and the previous "
-            f"{FORM_WINDOW_DAYS} days, and no player clears that on both sides of the "
-            f"break in the calendar. It returns once two full windows of fixtures line up."
+            f"Minimum {MIN_MINUTES_FORM} minutes in the window, shrunk toward the "
+            f"position average (K = {K_FORM})."
         )
-        return
-
-    theme.rule()
-    theme.section(
-        "Risers & Fallers",
-        subtitle=(f"Change in weighted g+/90 against the previous {FORM_WINDOW_DAYS} days, "
-                  f"for the {len(movers)} players who clear {MIN_MINUTES_FORM} minutes in "
-                  f"both windows. This is a change in rate — the season value score "
-                  f"is a separate number and is not involved."),
-    )
-    rkey = f"form_rf_{form_date}_v1"
-    if rkey not in st.session_state:
-        with st.spinner("Computing form change…"):
-            adapted = form_as_card_rows(movers, "form_delta")
-            rise, fall = select_risers_xi(adapted), select_fallers_xi(adapted)
-            win = f"vs previous {FORM_WINDOW_DAYS} days"
-            st.session_state[rkey] = (
-                render_leaderboard_card(rise, title="Risers", season=IN_SEASON_YEAR,
-                                        subtitle=f"Biggest g+/90 gains  ·  {win}"),
-                render_leaderboard_card(fall, title="Fallers", season=IN_SEASON_YEAR,
-                                        subtitle=f"Biggest g+/90 drops  ·  {win}"),
-                rise, fall,
-            )
-
-    rise_png, fall_png, rise_rows, fall_rows = st.session_state[rkey]
-    left, right = st.columns(2)
-    with left:
-        st.caption("**Risers**")
-        st.image(rise_png, width="stretch")
-        if st.download_button("⬇ Risers (PNG)", data=rise_png,
-                              file_name=f"risers_{IN_SEASON_YEAR}_{form_date}.png",
-                              mime="image/png", key="dl_risers"):
-            track.card_download("risers", season=IN_SEASON_YEAR, window=form_date)
-        _stats_table(rise_rows, value_label="Δ g+/90")
-    with right:
-        st.caption("**Fallers**")
-        st.image(fall_png, width="stretch")
-        if st.download_button("⬇ Fallers (PNG)", data=fall_png,
-                              file_name=f"fallers_{IN_SEASON_YEAR}_{form_date}.png",
-                              mime="image/png", key="dl_fallers"):
-            track.card_download("fallers", season=IN_SEASON_YEAR, window=form_date)
-        _stats_table(fall_rows, value_label="Δ g+/90")
+        _form_table(rows)
 
 
-# --- Newcomer Watch ---------------------------------------------------------
-
-def _newcomers(latest_snap: str) -> None:
-    min_minutes = state.get_min_minutes(IN_SEASON_YEAR)
-    theme.section(
-        "Newcomers · first year in NWSL",
-        subtitle=("Highest-value outfield players in their first NWSL season — college "
-                  "signings, international transfers and returnees alike. Outfield only. "
-                  "**Positions are left blank where no first-year player is above the "
-                  "positional average** — an empty slot is a deliberate omission, not a "
-                  "missing graphic."),
-        eyebrow_text=f"NWSL {IN_SEASON_YEAR} · IN PROGRESS",
-    )
-
-    key = f"drops_newcomers_{latest_snap}_{min_minutes}_v1"
-    if key not in st.session_state:
-        with st.spinner("Finding newcomers…"):
-            table = loaders.load_in_season_table(min_minutes, latest_snap)
-            hist = loaders.cached_historical_ids()
-            newcomers = table[~table["player_id"].astype(str).isin(hist)].copy()
-            rows = select_newcomer_watch_xi(newcomers)
-            st.session_state[key] = (
-                render_leaderboard_card(
-                    rows, title="Newcomers", season=IN_SEASON_YEAR,
-                    subtitle="First-year NWSL players by value score  ·  Outfield only",
-                ),
-                rows,
-            )
-
-    png, rows = st.session_state[key]
-    img_col, meta_col = st.columns([3, 2])
-    with img_col:
-        st.image(png, width="stretch")
-    with meta_col:
-        if st.download_button("⬇ Download PNG", data=png,
-                              file_name=f"newcomers_{IN_SEASON_YEAR}_{latest_snap}.png",
-                              mime="image/png", key="dl_newcomers"):
-            track.card_download("newcomers", season=IN_SEASON_YEAR)
-        _stats_table(rows)
-
-
-# --- Shared ------------------------------------------------------------------
-
-def _stats_table(rows: list[dict], value_label: str = "Value") -> None:
-    """Full stats for the filled slots of a leaderboard card."""
+def _form_table(rows: list[dict]) -> None:
     filled = [r for r in rows if r["player_name"] != "—"]
     if not filled:
         return
-    show_college = any("college_value_percentile" in r for r in filled)
-
-    def _row(r: dict) -> dict:
-        d = {
+    with st.expander("Full XI — full stats", expanded=False):
+        df = pd.DataFrame([{
             "Pos": r["position"],
             "Player": r["player_name"],
             "Team": r["team_name"],
-            value_label: f"{r['value_score']:+.2f}",
+            "g+/90": f"{r['value_score']:+.2f}",
             "Minutes": f"{r['minutes_played']:,}",
-        }
-        if show_college:
-            pct = r.get("college_value_percentile")
-            d["College value (%ile)"] = f"{pct:.0f}" if pct is not None else "—"
-        return d
+        } for r in filled])
+        st.dataframe(c.dash_blanks(df), hide_index=True, width="stretch")
 
-    with st.expander("Selected XI — full stats", expanded=False):
-        st.dataframe(c.dash_blanks(pd.DataFrame([_row(r) for r in filled])),
-                     hide_index=True, width="stretch")
+
+# --- Disclosure -------------------------------------------------------------
+
+def _how_calculated(form: pd.DataFrame, cov: dict | None) -> None:
+    """All the caveats, in one expander.
+
+    They used to occupy three paragraphs between the hero and the first content,
+    which meant every visitor read the limitations before seeing anything the
+    limitations applied to. Each card keeps a one-line version beside it.
+    """
+    with st.expander("How this is calculated", expanded=False):
+        st.markdown(
+            f"""
+**Team of the Week** — raw goals added in that matchday's matches only, ranked within
+position, minimum {TOTW_MIN_MINUTES} minutes. Deliberately no shrinkage and no z-scores:
+a single-match sample is what the format *is*, and every football fan already reads it
+that way. The goalkeeper is ranked among keepers, from a different set of actions
+(shot-stopping, claiming, sweeping), so her number is tagged **GK** and is not comparable
+with the outfielders' on the same card.
+
+**Coverage** — ASA publishes played fixtures only, so a postponed game leaves no trace in
+the data. The card states how many fixtures its matchday contains, and says so explicitly
+when that is short of a full round, rather than implying a complete week.
+
+**In form** — the last {FORM_WINDOW_DAYS} days only, for players with at least
+{MIN_MINUTES_FORM} minutes in that window, shrunk toward the position average with
+**K = {K_FORM} minutes** and then z-scored within position. It is a separate metric from
+the season value score and the two are never added, subtracted or shown in one column.
+"""
+        )
+        if not form.empty:
+            n_cur, n_prev = int(form["form_fixtures"].iloc[0]), int(form["prev_fixtures"].iloc[0])
+            st.markdown(
+                f"This form window covers **{n_cur} fixtures**; the previous "
+                f"{FORM_WINDOW_DAYS} days covered **{n_prev}**."
+            )
+            thin = (form[["position", "form_cohort_n"]].drop_duplicates()
+                    .query(f"form_cohort_n <= {SMALL_COHORT}").sort_values("form_cohort_n"))
+            if not thin.empty:
+                bits = ", ".join(f"{r.position} ({int(r.form_cohort_n)})"
+                                 for r in thin.itertuples())
+                st.markdown(
+                    f"**Thin cohorts this window** — {bits}. A form score is standardised "
+                    f"against the players at that position who clear the floor, so with a "
+                    f"small group the ranking is indicative. Positions with fewer than "
+                    f"{MIN_COHORT_FOR_RANK} qualifiers get no rank or score at all."
+                )
+        st.caption(
+            "Value scores are z-scored within position and are not comparable across "
+            "positions or across seasons."
+        )

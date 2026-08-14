@@ -45,13 +45,16 @@ from src.data.sources import (  # noqa: E402
     fetch_teams,
     fetch_player_birthdates,
 )
+from src.data.sources import fetch_games, fetch_goalkeeper_goals_added  # noqa: E402
 from src.analysis.ranking import build_player_value_table  # noqa: E402
 from src.analysis.form import compute_form, window_bounds  # noqa: E402
+from src.analysis.matches import build_match_table  # noqa: E402
 
 SEASON = "2026"
 SEASON_START = "2026-03-13"
 SNAP_DIR = _REPO_ROOT / "data" / "snapshots"
 FORM_DIR = _REPO_ROOT / "data" / "form"
+MATCH_DIR = _REPO_ROOT / "data" / "matches"
 
 
 def _snapshot_path(cutoff: str) -> Path:
@@ -60,6 +63,63 @@ def _snapshot_path(cutoff: str) -> Path:
 
 def _form_path(cutoff: str) -> Path:
     return FORM_DIR / f"form_{SEASON}_{cutoff}.parquet"
+
+
+def write_matches() -> Path:
+    """Rebuild data/matches/matches_<season>.parquet from the whole season.
+
+    ONE file, rewritten in full each run — not dated snapshots. Match history is
+    immutable (matchday 16 will never change), so a dated daily copy would
+    re-commit the entire season every day and inflate a repo that Streamlit Cloud
+    clones on every deploy.
+
+    Whole-season rebuild rather than an incremental append, for two reasons:
+
+      * It is the only fetch that works. get_player_goals_added(game_ids=…)
+        returns HTTP 500 in every form, so gaps cannot be repaired selectively.
+        The season pull succeeds and covers all 148 fixtures exactly.
+      * It makes gaps impossible instead of detectable. A fresh clone with no
+        file and a run after the Action has been broken for a month take the
+        identical path and produce the identical complete table — there is no
+        first-run special case and no separate backfill mode to remember.
+
+    Late ASA corrections land automatically, since every row is re-derived.
+    """
+    MATCH_DIR.mkdir(parents=True, exist_ok=True)
+    path = MATCH_DIR / f"matches_{SEASON}.parquet"
+
+    ga = fetch_player_goals_added(season_name=SEASON, split_by_games=True, refresh=True)
+    games = fetch_games(season_name=SEASON, refresh=True)
+    mt = build_match_table(ga, games, fetch_players(), fetch_teams())
+
+    # Health assertion, not a repair path: every fixture must be represented. A
+    # mismatch means something upstream changed, and since selective re-fetching
+    # is impossible it should stop the run rather than be silently patched.
+    fixtures = set(games["game_id"])
+    covered = set(mt["game_id"])
+    missing = fixtures - covered
+    if missing:
+        raise RuntimeError(
+            f"match table is missing {len(missing)} of {len(fixtures)} fixtures "
+            f"(e.g. {sorted(missing)[:3]}) — refusing to write an incomplete file."
+        )
+
+    mt.to_parquet(path, index=False)
+    print(f"[write] {path.name}  rows={len(mt)}  fixtures={len(covered)}  "
+          f"matchdays={mt['matchday'].min()}-{mt['matchday'].max()}  "
+          f"players={mt['player_id'].nunique()}")
+
+    # Goalkeepers, kept in a SEPARATE file because it is a separate metric:
+    # Shotstopping/Claiming/Sweeping, not the outfield action types. Storing them
+    # together would invite a join that ranks keepers against outfielders.
+    gk_path = MATCH_DIR / f"matches_gk_{SEASON}.parquet"
+    gk = fetch_goalkeeper_goals_added(season_name=SEASON, split_by_games=True, refresh=True)
+    gkt = build_match_table(gk, games, fetch_players(), fetch_teams(),
+                            default_position="GK")
+    gkt.to_parquet(gk_path, index=False)
+    print(f"[write] {gk_path.name}  rows={len(gkt)}  "
+          f"keepers={gkt['player_id'].nunique()}")
+    return path
 
 
 def write_form(cutoff: str, force: bool = False) -> Path | None:
@@ -190,6 +250,7 @@ def main() -> None:
     cutoff = args.date if args.date else yesterday.isoformat()
     write_snapshot(cutoff, force=args.force)
     write_form(cutoff, force=args.force)
+    write_matches()
 
 
 if __name__ == "__main__":

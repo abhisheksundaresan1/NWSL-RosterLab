@@ -116,6 +116,27 @@ def load_form(date: str, season: str = IN_SEASON_YEAR) -> pd.DataFrame:
     return pd.read_parquet(path)
 
 
+# --- Match-level table (one file per season, rebuilt in place) ---------------
+
+_MATCH_DIR = Path(__file__).resolve().parents[2] / "data" / "matches"
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def load_matches(season: str = IN_SEASON_YEAR, goalkeepers: bool = False) -> pd.DataFrame:
+    """Per-player-per-match table. Keepers live in a separate file on purpose:
+    their g+ is a different metric, and one table would invite ranking them
+    against outfielders."""
+    name = f"matches_gk_{season}.parquet" if goalkeepers else f"matches_{season}.parquet"
+    path = _MATCH_DIR / name
+    return pd.read_parquet(path) if path.exists() else pd.DataFrame()
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def load_fixtures(season: str = IN_SEASON_YEAR) -> pd.DataFrame:
+    from src.data.sources import fetch_games
+    return fetch_games(season_name=season)
+
+
 # --- Insight + card ---------------------------------------------------------
 
 @st.cache_data(show_spinner=False)

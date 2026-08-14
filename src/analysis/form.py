@@ -86,6 +86,18 @@ MIN_MINUTES_FORM = 180
 SMALL_COHORT = 10          # at or below: publish the rank, but caveat it
 MIN_COHORT_FOR_RANK = 5    # below: publish NO rank and NO z-score at all
 
+# Minimum movement worth calling a rise or a fall, in weighted g+/90.
+#
+# The league's weighted_ga_p90 has SD ~= 0.09, so 0.10 is "this player's rate
+# moved by about the gap between an average and a good player". Without it the
+# cards fill with noise: measured on a live window the median |form_delta| is
+# 0.075 and 63% of movers clear 0.05, which is how +0.047 and +0.046 came to
+# occupy slots on a card headed "biggest risers".
+#
+# At this threshold only ~8 players qualify league-wide, which is why Risers and
+# Fallers no longer use the formation card — see render_ranked_list_card.
+MIN_FORM_DELTA = 0.10
+
 # --- On the uneven calendar -------------------------------------------------
 # The NWSL season is not uniform: 2026 has a 27-day international break
 # (2026-05-31 → 06-27) and a 19-day one in April. The 30 days to 2026-08-10 hold

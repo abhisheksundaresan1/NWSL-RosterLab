@@ -47,7 +47,7 @@ st.set_page_config(
 from src.analytics import track                      # noqa: E402
 from src.ui import state, theme                      # noqa: E402
 from src.ui.pages import (                           # noqa: E402
-    this_week, players, teams, prospects, ask, method,
+    this_week, players, teams, drops, prospects, ask, method,
 )
 
 theme.inject()
@@ -127,6 +127,7 @@ PAGES = [
     st.Page(this_week.render, title="This week", url_path="this-week", default=True),
     st.Page(players.render,   title="Players",   url_path="players"),
     st.Page(teams.render,     title="Teams",     url_path="teams"),
+    st.Page(drops.render,     title="Drops",     url_path="drops"),
     st.Page(prospects.render, title="Prospects", url_path="prospects"),
     st.Page(ask.render,       title="Ask",       url_path="ask"),
     st.Page(method.render,    title="Method",    url_path="method"),

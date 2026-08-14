@@ -115,6 +115,26 @@ header[data-testid="stHeader"] {{ height: 0; min-height: 0; background: transpar
 }}
 [class*="st-key-rl_nav"] [data-testid="stPageLink"] span {{ font-weight: 500; }}
 
+/* ---- Nav on narrow screens ----------------------------------------------
+   st.columns stacks vertically below ~640px, which turned the nav into seven
+   full-width rows stacked above the content — a wall to scroll past before
+   reaching the page on a phone. Overriding the stack to a wrapping flex row
+   gives two compact rows instead. Streamlit's own overflow behaviour is left
+   alone; this only changes how the columns lay out.                          */
+@media (max-width: 640px) {{
+    [class*="st-key-rl_nav"] [data-testid="stHorizontalBlock"] {{
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        gap: 2px 14px !important;
+    }}
+    [class*="st-key-rl_nav"] [data-testid="stColumn"] {{
+        width: auto !important;
+        flex: 0 0 auto !important;
+        min-width: 0 !important;
+    }}
+    [class*="st-key-rl_nav"] [data-testid="stPageLink"] a {{ padding: 4px 0; }}
+}}
+
 /* ---- App header (brand + global season) ----------------------------------
    Stacked lockup: the league as a small tracked eyebrow over the product name,
    so "RosterLab" carries the weight and reads as a logo rather than as a line

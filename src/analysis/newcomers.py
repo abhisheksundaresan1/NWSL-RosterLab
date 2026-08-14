@@ -92,11 +92,17 @@ def _college_value_map() -> dict[str, float]:
         return {}
 
 
-# A newcomer must be at least positionally average to appear. The rank window
+# A newcomer must be clearly above positional average to appear. The rank window
 # alone is not enough: newcomer cohorts are small (sometimes 2-3 players at a
 # position), so "top 3" can include below-average players — and the card is
 # headlined "highest-value first-year players". An empty slot is more honest.
-MIN_VALUE_SCORE = 0.0
+#
+# Raised from 0.0 to 0.50. At 0.0 the gate only excluded BELOW-average players,
+# which let +0.080 and +0.013 hold slots — numbers indistinguishable from
+# positional average. value_score is a z-score, so 0.50 states something a reader
+# can check: at least half a standard deviation above the average player in her
+# position.
+MIN_VALUE_SCORE = 0.50
 
 
 def select_newcomer_watch_xi(newcomer_vt: pd.DataFrame,

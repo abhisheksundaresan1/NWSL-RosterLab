@@ -23,6 +23,11 @@ data/processed/
 !data/form/
 !data/form/*.parquet
 
+# And the match-level table (one file per season, rebuilt in place) — Team of
+# the Week reads it at render time.
+!data/matches/
+!data/matches/*.parquet
+
 # Claude Code session files
 .claude/
 

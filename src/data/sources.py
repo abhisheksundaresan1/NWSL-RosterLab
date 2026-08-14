@@ -160,6 +160,57 @@ def fetch_teams(refresh: bool = False) -> pd.DataFrame:
     return df
 
 
+def fetch_games(refresh: bool = False, season_name: str | None = None) -> pd.DataFrame:
+    """NWSL fixtures: one row per match, with game_id, date, matchday and score.
+
+    This is the spine of the match-level layer — it is what turns a player's g+ in
+    a game into "1.2 against Portland, away, in a 4-3 win".
+
+    NOTE: ASA returns PLAYED fixtures only. Every row comes back status='FullTime',
+    so a matchday with a postponed game is indistinguishable from a complete one.
+    Nothing here may infer completeness from `status`; see
+    matches.latest_complete_matchday, which uses fixture dates instead.
+    """
+    suffix = season_name or "all"
+    path = _cache_path(f"nwsl_games_{suffix}")
+    if path.exists() and not refresh:
+        return pd.read_parquet(path)
+    kwargs = {"season_name": season_name} if season_name else {}
+    df = _asa.get_games(leagues="nwsl", **kwargs)
+    df = _flatten_mixed_columns(df)
+    df.to_parquet(path, index=False)
+    return df
+
+
+def fetch_goalkeeper_goals_added(
+    refresh: bool = False,
+    season_name: str | None = None,
+    split_by_games: bool = False,
+) -> pd.DataFrame:
+    """NWSL goalkeeper g+ — a DIFFERENT metric from the outfield one.
+
+    The action types are Claiming, Fielding, Handling, Passing, Shotstopping and
+    Sweeping, so a keeper's number is not comparable with an outfielder's even
+    though both are called "goals added". Anything that displays the two together
+    must mark the keeper's value; see card.py's `scale_tag`.
+    """
+    suffix = season_name or "all"
+    if split_by_games:
+        suffix += "_bygame"
+    path = _cache_path(f"nwsl_gk_goals_added_{suffix}")
+    if path.exists() and not refresh:
+        return pd.read_parquet(path)
+    kwargs = {}
+    if season_name:
+        kwargs["season_name"] = season_name
+    if split_by_games:
+        kwargs["split_by_games"] = True
+    df = _asa.get_goalkeeper_goals_added(leagues="nwsl", **kwargs)
+    df = _flatten_mixed_columns(df)
+    df.to_parquet(path, index=False)
+    return df
+
+
 def _normalize_name(name: str) -> str:
     """NFKD → ASCII → lowercase → whitespace collapse for fuzzy name matching."""
     s = unicodedata.normalize("NFKD", str(name))

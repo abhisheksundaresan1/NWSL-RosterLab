@@ -734,6 +734,7 @@ def render_leaderboard_card(
     title: str,
     season: str,
     subtitle: str | None = None,
+    coverage: str | None = None,
 ) -> bytes:
     """
     Render a 1080×1350 PNG leaderboard card and return PNG bytes.
@@ -750,9 +751,12 @@ def render_leaderboard_card(
     # Neutral header color (multiple teams — no single team color)
     HEADER_COLOR = "#1A3A5C"
     HEADER_H     = 200
-    SUBTITLE_H   = 60
-    PITCH_Y      = HEADER_H + SUBTITLE_H      # 260
-    PITCH_H      = 940
+    # A coverage line needs a band of its own; at the original 60px the subtitle
+    # rendered underneath it and was clipped by the top of the pitch. Cards
+    # without coverage keep the original geometry exactly.
+    SUBTITLE_H   = 104 if coverage else 60
+    PITCH_Y      = HEADER_H + SUBTITLE_H
+    PITCH_H      = 940 - (SUBTITLE_H - 60)
     FOOTER_Y     = CARD_H - 80               # 1270
 
     img  = Image.new("RGBA", (CARD_W, CARD_H), BG_COLOR)
@@ -762,13 +766,28 @@ def render_leaderboard_card(
     hook_text = _clean_text(f"{title}  ·  {season}")
     _draw_header(draw, img, HEADER_COLOR, hook_text, header_h=HEADER_H)
 
+    # --- Coverage line (optional, prominent) ---
+    # Sits ABOVE the subtitle, in the accent colour and mono face, because what a
+    # card covers is not fine print: ASA returns played fixtures only, so a
+    # matchday missing a postponed game looks identical to a complete one. A
+    # reader must be able to see the scope without reading the small text.
+    if coverage:
+        cov_font = _get_bold_font(27)
+        cov_text = _clean_text(coverage)
+        cb = draw.textbbox((0, 0), cov_text, font=cov_font)
+        draw.text(((CARD_W - (cb[2] - cb[0])) // 2, HEADER_H + 8), cov_text,
+                  font=cov_font, fill=(255, 183, 77, 255))
+
     # --- Subtitle ---
     if subtitle:
         sub_font = _get_font(26)
         sub_text = _clean_text(subtitle)
         bb = draw.textbbox((0, 0), sub_text, font=sub_font)
         sub_x = (CARD_W - (bb[2] - bb[0])) // 2
-        sub_y = HEADER_H + (SUBTITLE_H - (bb[3] - bb[1])) // 2
+        # When a coverage line is present the subtitle sits below it; otherwise
+        # it keeps its original vertical centring so existing cards are unchanged.
+        sub_y = (HEADER_H + 46 if coverage
+                 else HEADER_H + (SUBTITLE_H - (bb[3] - bb[1])) // 2)
         draw.text((sub_x, sub_y), sub_text, font=sub_font,
                   fill=(160, 200, 230, 255))
 
@@ -784,6 +803,133 @@ def render_leaderboard_card(
     # --- Footer ---
     _draw_footer(draw, footer_y=FOOTER_Y)
 
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
+    return buf.getvalue()
+
+
+def render_ranked_list_card(
+    rows: list[dict],
+    title: str,
+    season: str,
+    subtitle: str | None = None,
+    value_label: str = "",
+    coverage: str | None = None,
+    note: str | None = None,
+) -> bytes:
+    """Render a compact ranked list as a 1080×1350 PNG.
+
+    WHY THIS EXISTS, rather than reusing the pitch card.
+
+    The formation graphic works when it fills. Once Risers and Fallers applied a
+    meaningful movement threshold, only ~8 players qualified league-wide across
+    ten position slots — so the pitch rendered three or four markers and eleven
+    positions, which reads as a broken graphic rather than a deliberate one. The
+    blank-slot convention only carries meaning on cards that usually fill.
+
+    A list has no fixed number of places, so a short list is simply a short card
+    and nothing looks missing. Length follows the data.
+
+    rows — dicts with player_name, team_abbreviation, value_score, and optionally
+           sample_label. Rows are drawn in the order given; pass them sorted.
+    """
+    HEADER_COLOR = "#1A3A5C"
+    HEADER_H     = 200
+    SUBTITLE_H   = 60
+    LIST_Y       = HEADER_H + SUBTITLE_H
+    FOOTER_Y     = CARD_H - 80
+
+    img  = Image.new("RGBA", (CARD_W, CARD_H), BG_COLOR)
+    draw = ImageDraw.Draw(img)
+
+    _draw_header(draw, img, HEADER_COLOR, _clean_text(f"{title}  ·  {season}"),
+                 header_h=HEADER_H)
+
+    if coverage:
+        cov_font = _get_bold_font(27)
+        cov = _clean_text(coverage)
+        cb = draw.textbbox((0, 0), cov, font=cov_font)
+        draw.text(((CARD_W - (cb[2] - cb[0])) // 2, HEADER_H + 8), cov,
+                  font=cov_font, fill=(255, 183, 77, 255))
+
+    if subtitle:
+        sub_font = _get_font(26)
+        sub = _clean_text(subtitle)
+        bb = draw.textbbox((0, 0), sub, font=sub_font)
+        sub_y = HEADER_H + 46 if coverage else HEADER_H + (SUBTITLE_H - (bb[3] - bb[1])) // 2
+        draw.text(((CARD_W - (bb[2] - bb[0])) // 2, sub_y), sub,
+                  font=sub_font, fill=(160, 200, 230, 255))
+
+    filled = [r for r in rows if r.get("player_name") and r["player_name"] != "—"]
+
+    if not filled:
+        # An empty list says so in words. It never pretends to be a ranking.
+        msg_font = _get_font(30)
+        msg = "No player cleared the threshold this window"
+        mb = draw.textbbox((0, 0), msg, font=msg_font)
+        draw.text(((CARD_W - (mb[2] - mb[0])) // 2, LIST_Y + 120), msg,
+                  font=msg_font, fill=TEXT_SECONDARY)
+        _draw_footer(draw, footer_y=FOOTER_Y)
+        buf = io.BytesIO(); img.save(buf, "PNG"); return buf.getvalue()
+
+    PAD_X    = 70
+    AVAIL    = FOOTER_Y - LIST_Y - 60
+    # Rows breathe to fill the space, then the whole block is centred vertically.
+    # Without the centring a short list (8 qualifiers is normal at this threshold)
+    # hugs the top and leaves a third of the card visibly empty, which reads as
+    # truncated — the exact impression the format change was meant to remove.
+    ROW_H    = min(112, max(64, AVAIL // max(len(filled), 1)))
+    rank_font = _get_bold_font(30)
+    name_font = _get_bold_font(34)
+    meta_font = _get_font(22)
+    val_font  = _get_bold_font(38)
+
+    if value_label:
+        lbl_font = _get_font(20)
+        draw.text((CARD_W - PAD_X - lbl_font.getlength(value_label), LIST_Y + 6),
+                  value_label, font=lbl_font, fill=(120, 150, 175, 255))
+
+    block_h = ROW_H * len(filled)
+    y = LIST_Y + 34 + max(0, (AVAIL - block_h) // 2)
+    for i, r in enumerate(filled, start=1):
+        accent = _display_accent(TEAM_COLORS.get(r.get("team_abbreviation", ""),
+                                                 DEFAULT_TEAM_COLOR))
+        # Club colour bar — the same visual key the app's player rows use.
+        draw.rectangle([(PAD_X, y + 6), (PAD_X + 6, y + ROW_H - 18)], fill=accent)
+
+        draw.text((PAD_X + 22, y + 12), f"{i}", font=rank_font,
+                  fill=(120, 150, 175, 255))
+
+        name = _clean_text(str(r["player_name"]))
+        draw.text((PAD_X + 74, y + 4), name, font=name_font, fill=TEXT_PRIMARY)
+
+        meta = " · ".join(str(p) for p in (
+            r.get("position"), r.get("team_abbreviation"), r.get("sample_label")
+        ) if p)
+        if meta:
+            draw.text((PAD_X + 76, y + 46), _clean_text(meta),
+                      font=meta_font, fill=TEXT_SECONDARY)
+
+        val = f"{r['value_score']:+.2f}"
+        vb = draw.textbbox((0, 0), val, font=val_font)
+        draw.text((CARD_W - PAD_X - (vb[2] - vb[0]), y + 12), val,
+                  font=val_font,
+                  fill=(255, 183, 77, 255) if r["value_score"] >= 0 else (196, 117, 106, 255))
+
+        y += ROW_H
+        if y > FOOTER_Y - ROW_H:
+            break
+
+    # A short list leaves space; fill it with the REASON it is short rather than
+    # with nothing. "Only 3 players moved this much" is information — an
+    # unexplained gap just looks like missing data.
+    if note:
+        note_font = _get_font(23)
+        nb = draw.textbbox((0, 0), _clean_text(note), font=note_font)
+        draw.text(((CARD_W - (nb[2] - nb[0])) // 2, min(y + 30, FOOTER_Y - 60)),
+                  _clean_text(note), font=note_font, fill=(120, 150, 175, 255))
+
+    _draw_footer(draw, footer_y=FOOTER_Y)
     buf = io.BytesIO()
     img.save(buf, "PNG")
     return buf.getvalue()
@@ -926,11 +1072,34 @@ def _leaderboard_pitch(rows: list[dict], pitch_h_px: int = 940) -> "Image.Image"
         draw.text((nx, cy + marker_r + 4), name,
                   font=name_font, fill=(255, 255, 255, 230))
 
-        # Score above marker (amber)
+        # Optional third line: opponent + scoreline, e.g. "at BOS 4-3". Opt-in via
+        # the `context` key, so every card that does not set it renders exactly as
+        # it did before this existed.
+        ctx = row.get("context")
+        if ctx:
+            ctx_font = _get_font(17)
+            ctx_txt = _fit_name(_clean_text(str(ctx)), ctx_font, max_label_w)
+            cb = draw.textbbox((0, 0), ctx_txt, font=ctx_font)
+            cw = cb[2] - cb[0]
+            cxp = min(max(cx - cw // 2, PAD_X // 2), W - PAD_X // 2 - cw)
+            draw.text((cxp, cy + marker_r + 6 + (nb[3] - nb[1]) + 6), ctx_txt,
+                      font=ctx_font, fill=(150, 170, 190, 230))
+
+        # Score above marker (amber), with an optional scale tag beside it.
+        # The tag exists because a goalkeeper's g+ is computed from entirely
+        # different action types; without a visible marker, eleven identically
+        # formatted numbers invite the reader to compare across the whole pitch.
+        tag = row.get("scale_tag")
+        tag_font = _get_font(15)
         sb = draw.textbbox((0, 0), score, font=score_font)
-        sw = sb[2] - sb[0]
-        draw.text((cx - sw // 2, cy - marker_r - (sb[3] - sb[1]) - 4), score,
-                  font=score_font, fill=(255, 183, 77, 255))
+        sw, sh = sb[2] - sb[0], sb[3] - sb[1]
+        tw = (tag_font.getlength(" " + tag) if tag else 0)
+        sx = cx - int((sw + tw) // 2)
+        sy = cy - marker_r - sh - 4
+        draw.text((sx, sy), score, font=score_font, fill=(255, 183, 77, 255))
+        if tag:
+            draw.text((sx + sw + 4, sy + 3), tag,
+                      font=tag_font, fill=(150, 170, 190, 235))
 
     return img
 
