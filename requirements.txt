@@ -28,4 +28,8 @@ python-dotenv==1.2.2
 
 # Storage (parquet cache)
 pyarrow==24.0.0
+
+# Analytics — server-side event capture only (see src/analytics/track.py).
+# Pinned like everything else here: an unpinned dependency is what took the
+# deployed app down once already.
 posthog==7.38.6
