@@ -32,6 +32,46 @@ Five layers, kept in separate modules so the data layer can later be promoted to
 
 **Rule:** `app.py` must not contain data-fetching or metric math. That separation is deliberate.
 
+## Three metrics, deliberately separate — never combined
+
+The app now carries three player metrics. They answer different questions over
+different samples and are **never added, subtracted, or shown in one column**.
+
+| Metric | Window | Where | Method |
+|---|---|---|---|
+| **Value score** | season to date | Players, Teams, Drops | position-weighted g+/90, z-scored within position |
+| **Form** | last 30 days | This week, Teams | same shape, but K=120 and a 180-min floor |
+| **Team of the Week** | one matchday | This week | **raw** g+ within position, 45-min floor |
+
+Team of the Week deliberately applies **no shrinkage and no z-scoring**. A
+single-match sample is what that format *is*, and every football fan already
+reads it that way. Do not "improve" it by standardising it.
+
+## Match-level layer (`src/analysis/matches.py`)
+
+Joins per-match player g+ to the fixtures table so each row carries date,
+matchday, opponent, home/away and scoreline. Stored as ONE file per season,
+`data/matches/matches_<season>.parquet`, rebuilt whole on each snapshot run —
+match history is immutable, so dated daily copies would bloat a repo Streamlit
+Cloud clones on every deploy. Goalkeepers live in `matches_gk_<season>.parquet`.
+
+**Two ASA facts that constrain this layer — both measured, do not re-derive:**
+- `get_games()` returns **played fixtures only**; all rows come back
+  `status='FullTime'`. Completeness cannot be read from `status`, so
+  `latest_complete_matchday()` uses fixture dates with a 2-day lag, and
+  `match_coverage()` reports what a matchday contains rather than implying it is
+  whole. Round size comes from the season's own fixtures — the teams reference
+  holds 19 clubs while 16 played in 2026.
+- `get_player_goals_added(game_ids=…)` returns **HTTP 500 in every form**, so
+  gaps cannot be repaired selectively. The whole-season pull works and covers
+  every fixture, which is why the table is rebuilt rather than appended to.
+
+**Goalkeeper g+ is a different metric** — Claiming, Fielding, Handling, Passing,
+Shotstopping, Sweeping. It is not comparable with an outfielder's number, so
+anything showing both must mark it (see `scale_tag` in `card.py`). The GK slot
+lives in a TOTW-local formation; `FORMATION_SLOTS` stays 10 slots so the other
+XI cards never gain an empty keeper.
+
 ## Value score methodology
 **Position-weighted g+/90, z-scored within position.** Defined in `POSITION_WEIGHTS` dict at the top of `src/analysis/ranking.py` — edit freely to test alternative views.
 
