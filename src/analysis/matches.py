@@ -167,6 +167,74 @@ def latest_complete_matchday(games: pd.DataFrame, as_of: date | None = None,
     return int(eligible.index.max()) if not eligible.empty else None
 
 
+def matchday_index(match_table: pd.DataFrame) -> pd.DataFrame:
+    """Per-matchday summary derived from the MATCH TABLE, not the fixtures cache.
+
+    This exists because deriving the current matchday from fetch_games() was
+    silently a week stale in production. The fixtures parquet lives in data/raw/,
+    which is gitignored and only re-fetched when refresh=True — so a long-lived
+    Streamlit container answers "what is the latest matchday?" from whatever it
+    cached at boot. The match table is the opposite: committed to the repo and
+    rebuilt in full by the daily Action, so it is the only always-current source
+    the render path has.
+
+    Observed: the match table held matchdays 1-17 (to 2026-08-17) while the
+    cached fixtures stopped at 16 (2026-08-10), freezing Team of the Week a full
+    matchday behind on a page whose entire purpose is being weekly.
+
+    Returns one row per matchday: fixtures, clubs, first_date, last_date.
+    """
+    if match_table is None or match_table.empty:
+        return pd.DataFrame(columns=["matchday", "fixtures", "clubs",
+                                     "first_date", "last_date"])
+    df = match_table.dropna(subset=["matchday"]).copy()
+    df["_d"] = pd.to_datetime(df["date"]).dt.date
+    out = df.groupby("matchday").agg(
+        fixtures=("game_id", "nunique"),
+        clubs=("team_abbreviation", "nunique"),
+        first_date=("_d", "min"),
+        last_date=("_d", "max"),
+    ).reset_index()
+    out["matchday"] = out["matchday"].astype(int)
+    return out.sort_values("matchday").reset_index(drop=True)
+
+
+def latest_matchday_from_matches(match_table: pd.DataFrame,
+                                 as_of: date | None = None,
+                                 lag_days: int = 2) -> int | None:
+    """Most recent matchday old enough to treat as finished, from the match table."""
+    idx = matchday_index(match_table)
+    if idx.empty:
+        return None
+    cutoff = (as_of or date.today()) - timedelta(days=lag_days)
+    eligible = idx[idx["last_date"] <= cutoff]
+    return int(eligible["matchday"].max()) if not eligible.empty else None
+
+
+def coverage_from_matches(match_table: pd.DataFrame, matchday: int) -> dict:
+    """match_coverage(), sourced from the match table.
+
+    Round size is the season's maximum clubs-per-matchday // 2 rather than the
+    teams reference, which holds 19 clubs while 16 played in 2026.
+    """
+    idx = matchday_index(match_table)
+    row = idx[idx["matchday"] == matchday]
+    if row.empty:
+        return {"matchday": matchday, "fixtures": 0, "expected": None,
+                "short": False, "first_date": None, "last_date": None}
+    r = row.iloc[0]
+    expected = int(idx["clubs"].max()) // 2 if len(idx) else None
+    n = int(r["fixtures"])
+    return {
+        "matchday": int(matchday),
+        "fixtures": n,
+        "expected": expected,
+        "short": bool(expected and n < expected),
+        "first_date": r["first_date"],
+        "last_date": r["last_date"],
+    }
+
+
 def full_round(games: pd.DataFrame) -> int | None:
     """Fixtures in a complete round, derived from the season's own fixtures.
 

@@ -37,8 +37,9 @@ from src.analysis.form import (
     SMALL_COHORT, MIN_COHORT_FOR_RANK, form_as_card_rows, dominant_action,
 )
 from src.analysis.matches import (
-    TOTW_MIN_MINUTES, coverage_line, latest_complete_matchday, match_coverage,
-    select_team_of_the_week, totw_changes, totw_history,
+    TOTW_MIN_MINUTES, coverage_from_matches, coverage_line,
+    latest_matchday_from_matches, select_team_of_the_week,
+    totw_changes, totw_history,
 )
 from src.analysis.movement import select_risers_xi
 from src.analysis.season import IN_SEASON_YEAR
@@ -88,12 +89,16 @@ def _human_date(iso: str | None) -> str:
 
 
 def render() -> None:
-    fixtures = loaders.load_fixtures()
     matches = loaders.load_matches()
     keepers = loaders.load_matches(goalkeepers=True)
 
-    matchday = latest_complete_matchday(fixtures) if not fixtures.empty else None
-    cov = match_coverage(fixtures, matchday) if matchday else None
+    # Both derived from the match table, NOT from fetch_games(). The fixtures
+    # parquet lives in gitignored data/raw/ and is only re-fetched on refresh, so
+    # a long-lived container answers "latest matchday?" from its boot-time cache
+    # — which had Team of the Week stuck a week behind in production while the
+    # committed match table already held the newer round.
+    matchday = latest_matchday_from_matches(matches) if not matches.empty else None
+    cov = coverage_from_matches(matches, matchday) if matchday else None
 
     form_date = loaders.latest_form_date()
     form = loaders.load_form(form_date) if form_date else pd.DataFrame()
